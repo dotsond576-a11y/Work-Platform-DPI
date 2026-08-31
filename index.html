@@ -1005,6 +1005,26 @@ function openModal(html, wide){
 }
 function closeModal(){ document.getElementById("modal-root").innerHTML = ""; }
 
+function confirmModal(message, onConfirm, opts){
+  opts = opts || {};
+  var html = '<div class="modal-header"><h3>' + esc(opts.title || "Are you sure?") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body"><p style="margin:0;color:var(--text);line-height:1.5;">' + esc(message) + '</p></div>' +
+    '<div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+    '<button type="button" class="btn btn-danger" id="confirm-modal-yes">' + esc(opts.confirmLabel || "Delete") + '</button></div>';
+  openModal(html);
+  document.getElementById("confirm-modal-yes").addEventListener("click", function(){
+    closeModal();
+    onConfirm();
+  });
+}
+
+function alertModal(message, title){
+  var html = '<div class="modal-header"><h3>' + esc(title || "Notice") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body"><p style="margin:0;color:var(--text);line-height:1.5;">' + esc(message) + '</p></div>' +
+    '<div class="modal-footer"><button type="button" class="btn btn-primary" data-action="close-modal">OK</button></div>';
+  openModal(html);
+}
+
 function eventModalHTML(eventId, prefillDate, prefillBoard){
   var ev = eventId ? eventById(eventId) : null;
   var isNew = !ev;
@@ -1118,11 +1138,11 @@ var ACTIONS = {
   },
 
   "reset-data": function(){
-    if (confirm("This will permanently erase all boards, events, participants, and budgets, and restore the default setup. Continue?")){
+    confirmModal("This will permanently erase all boards, events, participants, and budgets, and restore the default setup. Continue?", function(){
       state = defaultState();
       ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null };
       saveState(); render();
-    }
+    }, { title: "Reset all data?", confirmLabel: "Reset everything" });
   },
 
   "board-filter": function(t){
@@ -1136,12 +1156,12 @@ var ACTIONS = {
     var id = t.getAttribute("data-id");
     var b = boardById(id);
     if (!b) return;
-    if (confirm('Delete "' + b.name + '"? Events on this board will become uncategorized (not deleted).')){
+    confirmModal('Delete "' + b.name + '"? Events on this board will become uncategorized (not deleted).', function(){
       state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
       state.boards = state.boards.filter(function(bb){ return bb.id !== id; });
       if (state.boardFilter === id) state.boardFilter = null;
       saveState(); render();
-    }
+    }, { title: "Delete board?" });
   },
   "pick-color": function(t){
     document.querySelectorAll("#color-palette .color-swatch").forEach(function(s){ s.classList.remove("selected"); });
@@ -1199,12 +1219,12 @@ var ACTIONS = {
     var id = t.getAttribute("data-id");
     var e = eventById(id);
     if (!e) return;
-    if (confirm('Delete "' + e.title + '"? This removes its attendance and budget data too.')){
+    confirmModal('Delete "' + e.title + '"? This removes its attendance and budget data too.', function(){
       state.events = state.events.filter(function(ev){ return ev.id !== id; });
       if (ui.attendanceSession === id) ui.attendanceSession = "directory";
       if (ui.budgetDetailId === id){ ui.budgetDetailId = null; ui.budgetTab = "overview"; }
-      saveState(); closeModal(); render();
-    }
+      saveState(); render();
+    }, { title: "Delete event?" });
   },
 
   "close-modal": function(){ closeModal(); },
@@ -1245,11 +1265,11 @@ var ACTIONS = {
     var id = t.getAttribute("data-id");
     var p = participantById(id);
     if (!p) return;
-    if (confirm('Remove "' + p.name + '" from the directory and every session?')){
+    confirmModal('Remove "' + p.name + '" from the directory and every session?', function(){
       state.participants = state.participants.filter(function(pp){ return pp.id !== id; });
       state.events.forEach(function(e){ e.attendeeIds = (e.attendeeIds||[]).filter(function(pid){ return pid !== id; }); });
       saveState(); render();
-    }
+    }, { title: "Remove participant?" });
   },
   "add-field": function(){ openModal(addFieldModalHTML()); },
   "submit-add-field": function(form){
@@ -1421,7 +1441,7 @@ function importRows(headerRow, dataRows, targetSessionId){
     count++;
   });
   saveState(); render();
-  alert("Imported " + count + " participant" + (count === 1 ? "" : "s") + ".");
+  alertModal("Imported " + count + " participant" + (count === 1 ? "" : "s") + ".", "Import complete");
 }
 
 function handleImportFile(file){
@@ -1437,7 +1457,7 @@ function handleImportFile(file){
     reader.readAsText(file);
   } else if (ext === "xlsx" || ext === "xls"){
     if (typeof XLSX === "undefined"){
-      alert("The spreadsheet reader could not load (no internet connection?). Please use a CSV file instead.");
+      alertModal("The spreadsheet reader could not load (no internet connection?). Please use a CSV file instead.", "Import unavailable");
       return;
     }
     var reader2 = new FileReader();
@@ -1451,7 +1471,7 @@ function handleImportFile(file){
     };
     reader2.readAsArrayBuffer(file);
   } else {
-    alert("Unsupported file type. Please upload a .csv, .xlsx, or .xls file.");
+    alertModal("Unsupported file type. Please upload a .csv, .xlsx, or .xls file.", "Import unavailable");
   }
 }
 document.getElementById("file-import-input").addEventListener("change", function(e){
