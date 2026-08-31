@@ -488,7 +488,8 @@ var ui = {
   attendanceSession: "directory",
   budgetTab: "overview",
   budgetDetailId: null,
-  dragEventId: null
+  dragEventId: null,
+  participantSearch: ""
 };
 
 /* ============================================================
@@ -589,6 +590,7 @@ function renderMain(){
   else if (state.currentView === "attendance") el.innerHTML = attendanceViewHTML();
   else if (state.currentView === "budget") el.innerHTML = budgetViewHTML();
   if (state.currentView === "board") wireBoardDnD();
+  if (state.currentView === "attendance") wireDirectorySearch();
 }
 
 /* ============================================================
@@ -784,17 +786,73 @@ function directoryTableHTML(){
   if (!state.participants.length){
     return emptyState("No participants yet.", "Add attendees from a session, or import a spreadsheet.");
   }
-  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+  var html = '<div class="field" style="max-width:340px;">' +
+    '<input type="text" id="participant-search" placeholder="Look up a participant by name, school, or email&hellip;" value="' + attr(ui.participantSearch||"") + '">' +
+  '</div>';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
     tableHeaderCells() + '<th>Sessions</th><th></th>' +
     '</tr></thead><tbody>';
   state.participants.forEach(function(p){
     var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
-    html += '<tr>' + participantCells(p) +
-      '<td style="font-family:var(--font-mono);text-align:center;">' + sessionCount + '</td>' +
+    var searchKey = (p.name + " " + (p.school||"") + " " + (p.email||"")).toLowerCase();
+    html += '<tr data-search="' + attr(searchKey) + '">' + participantCells(p) +
+      '<td style="text-align:center;"><button class="row-action" style="color:var(--blue-800);font-weight:700;font-family:var(--font-mono);" data-action="view-participant" data-id="' + p.id + '" title="View events attended">' + sessionCount + '</button></td>' +
       '<td><button class="row-action" data-action="delete-participant" data-id="' + p.id + '" title="Delete participant">&times;</button></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
+  return html;
+}
+
+function wireDirectorySearch(){
+  var input = document.getElementById("participant-search");
+  if (!input) return;
+  function applyFilter(){
+    var q = input.value.trim().toLowerCase();
+    ui.participantSearch = input.value;
+    document.querySelectorAll("table.data-table tbody tr[data-search]").forEach(function(row){
+      row.hidden = !!q && row.getAttribute("data-search").indexOf(q) === -1;
+    });
+  }
+  input.addEventListener("input", applyFilter);
+  applyFilter();
+}
+
+function participantDetailModalHTML(participantId){
+  var p = participantById(participantId);
+  if (!p){
+    return '<div class="modal-header"><h3>Participant not found</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+      '<div class="modal-body"><div class="empty-note">This participant may have been deleted.</div></div>';
+  }
+  var attended = sortedEvents().filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; });
+  var html = '<div class="modal-header"><h3>' + esc(p.name) + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>';
+  html += '<div class="modal-body">';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px 22px;margin-bottom:18px;font-size:13px;">';
+  if (p.school) html += '<div><span style="color:var(--text-muted);">School</span><br>' + esc(p.school) + '</div>';
+  if (p.email) html += '<div><span style="color:var(--text-muted);">Email</span><br>' + esc(p.email) + '</div>';
+  if (p.iein) html += '<div><span style="color:var(--text-muted);">IEIN</span><br>' + esc(p.iein) + '</div>';
+  state.customFields.forEach(function(f){
+    var val = p.custom && p.custom[f];
+    if (val) html += '<div><span style="color:var(--text-muted);">' + esc(f) + '</span><br>' + esc(val) + '</div>';
+  });
+  html += '</div>';
+  html += '<div class="section-label">Events attended (' + attended.length + ')</div>';
+  if (!attended.length){
+    html += '<div class="empty-note">Not enrolled in any sessions yet.</div>';
+  } else {
+    html += '<div style="max-height:340px;overflow-y:auto;">';
+    attended.forEach(function(e){
+      var d = parseISO(e.date);
+      html += '<div class="list-row" style="margin-bottom:6px;cursor:pointer;" data-action="goto-session" data-id="' + e.id + '">' +
+                '<div class="list-date">' + MONTH_SHORT[d.getMonth()].toUpperCase() + ' ' + pad(d.getDate()) + '</div>' +
+                '<div class="list-title">' + esc(e.title) + '</div>' +
+                '<div class="list-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
+              '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Close</button></div>';
   return html;
 }
 
@@ -823,9 +881,10 @@ function sessionRosterHTML(session){
     html += emptyState("No attendees enrolled.", "Add a new attendee or bring in someone from the directory.");
     return html;
   }
-  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' + tableHeaderCells() + '<th></th></tr></thead><tbody>';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' + tableHeaderCells() + '<th></th><th></th></tr></thead><tbody>';
   attendees.forEach(function(p){
     html += '<tr>' + participantCells(p) +
+      '<td><button class="row-action" style="color:var(--blue-800);" data-action="view-participant" data-id="' + p.id + '" title="View all events attended">&#128065;</button></td>' +
       '<td><button class="row-action" data-action="remove-attendance" data-event="' + session.id + '" data-participant="' + p.id + '" title="Remove from session">&times;</button></td>' +
       '</tr>';
   });
@@ -1140,7 +1199,7 @@ var ACTIONS = {
   "reset-data": function(){
     confirmModal("This will permanently erase all boards, events, participants, and budgets, and restore the default setup. Continue?", function(){
       state = defaultState();
-      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null };
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "" };
       saveState(); render();
     }, { title: "Reset all data?", confirmLabel: "Reset everything" });
   },
@@ -1271,6 +1330,8 @@ var ACTIONS = {
       saveState(); render();
     }, { title: "Remove participant?" });
   },
+  "view-participant": function(t){ openModal(participantDetailModalHTML(t.getAttribute("data-id")), true); },
+  "goto-session": function(t){ ui.attendanceSession = t.getAttribute("data-id"); closeModal(); render(); },
   "add-field": function(){ openModal(addFieldModalHTML()); },
   "submit-add-field": function(form){
     var fd = new FormData(form);
