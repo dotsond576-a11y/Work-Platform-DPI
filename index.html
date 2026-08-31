@@ -753,6 +753,7 @@ function attendanceViewHTML(){
     '<button class="btn" data-action="add-field">+ Add info field</button>' +
     '<button class="btn" data-action="download-template">Download template</button>' +
     '<button class="btn btn-secondary" data-action="import-file">Import spreadsheet</button>' +
+    (ui.attendanceSession === "directory" ? '<button class="btn btn-primary" data-action="add-participant">+ Add participant</button>' : '') +
   '</div>';
   html += '<div class="two-col">';
   html += '<div class="side-list">';
@@ -1132,8 +1133,9 @@ function boardModalHTML(boardId){
 }
 
 function attendeeModalHTML(sessionId){
-  return '<form id="attendee-form" data-action="submit-new-attendee" data-event="' + sessionId + '">' +
-    '<div class="modal-header"><h3>Add attendee</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+  var isEnroll = !!sessionId;
+  return '<form id="attendee-form" data-action="submit-new-attendee" data-event="' + (sessionId||"") + '">' +
+    '<div class="modal-header"><h3>' + (isEnroll ? "Add attendee" : "Add participant") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
       '<div class="field"><label>Name</label><input type="text" name="name" required></div>' +
       '<div class="field-row">' +
@@ -1144,7 +1146,7 @@ function attendeeModalHTML(sessionId){
     '</div>' +
     '<div class="modal-footer">' +
       '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
-      '<button type="submit" class="btn btn-primary">Add & enroll</button>' +
+      '<button type="submit" class="btn btn-primary">' + (isEnroll ? "Add & enroll" : "Add participant") + '</button>' +
     '</div>' +
   '</form>';
 }
@@ -1291,6 +1293,7 @@ var ACTIONS = {
 
   "attendance-select": function(t){ ui.attendanceSession = t.getAttribute("data-id"); render(); },
   "add-new-attendee": function(t){ openModal(attendeeModalHTML(t.getAttribute("data-id"))); },
+  "add-participant": function(){ openModal(attendeeModalHTML(null)); },
   "add-existing-attendee": function(t){ openModal(existingAttendeeModalHTML(t.getAttribute("data-id"))); },
   "submit-new-attendee": function(form){
     var fd = new FormData(form);
