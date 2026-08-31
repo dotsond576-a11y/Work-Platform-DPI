@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DPI Teacher Training Calendar</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2313294B'/%3E%3Crect x='20' y='28' width='60' height='52' rx='6' fill='%23fff'/%3E%3Crect x='20' y='28' width='60' height='14' rx='6' fill='%23E84A27'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<style>
+/* ========================= Design tokens ========================= */
+:root{
+  --blue-900:#0A1830;
+  --blue-800:#13294B;
+  --blue-700:#1B3A63;
+  --blue-600:#2E5A88;
+  --blue-400:#6B8CB8;
+  --blue-100:#E8EEF6;
+  --orange-700:#C43D1F;
+  --orange-600:#E84A27;
+  --orange-500:#F1793F;
+  --orange-300:#F5A671;
+  --orange-100:#FDEBE3;
+  --bg:#F5F7FB;
+  --card:#FFFFFF;
+  --border:#E2E8F0;
+  --text:#1A202C;
+  --text-muted:#64748B;
+  --text-faint:#98A5B8;
+  --radius:12px;
+  --radius-sm:8px;
+  --shadow:0 1px 3px rgba(19,41,75,0.08), 0 1px 2px rgba(19,41,75,0.06);
+  --shadow-md:0 8px 24px rgba(19,41,75,0.14);
+  --font-heading:'Sora',sans-serif;
+  --font-body:'Inter',sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:14px;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;font-size:14px;}
+a{color:inherit;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+
+/* ========================= Layout ========================= */
+#app{display:flex;flex-direction:column;height:100vh;}
+
+header.app-header{
+  position:relative;
+  background:linear-gradient(120deg, var(--blue-900) 0%, var(--blue-800) 55%, var(--blue-700) 100%);
+  color:#fff;
+  padding:14px 24px;
+  display:flex;
+  align-items:center;
+  gap:20px;
+  border-bottom:3px solid var(--orange-600);
+  overflow:hidden;
+  flex-shrink:0;
+}
+header.app-header::after{
+  content:'';
+  position:absolute;
+  top:-60px; right:-60px;
+  width:260px;height:260px;
+  background:radial-gradient(circle, rgba(232,74,39,0.35) 0%, rgba(232,74,39,0) 70%);
+  pointer-events:none;
+}
+.brand{display:flex;align-items:center;gap:10px;z-index:1;}
+.brand-mark{
+  width:34px;height:34px;border-radius:9px;
+  background:linear-gradient(135deg, var(--orange-600), var(--orange-500));
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-heading);font-weight:800;font-size:15px;color:#fff;
+  flex-shrink:0;
+}
+#title-input, .title-text{
+  font-family:var(--font-heading);
+  font-weight:700;
+  font-size:19px;
+  color:#fff;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:6px;
+  padding:4px 8px;
+  min-width:120px;
+}
+#title-input:hover, .title-text:hover{border-color:rgba(255,255,255,0.35);}
+#title-input:focus{outline:none;border-color:var(--orange-500);background:rgba(255,255,255,0.08);}
+.title-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw;}
+
+.view-switcher{display:flex;gap:4px;background:rgba(255,255,255,0.08);padding:4px;border-radius:999px;z-index:1;}
+.view-switcher button{
+  border:none;background:transparent;color:rgba(255,255,255,0.8);
+  padding:8px 16px;border-radius:999px;font-weight:600;font-size:13px;
+  transition:background .15s, color .15s;
+}
+.view-switcher button:hover{color:#fff;background:rgba(255,255,255,0.08);}
+.view-switcher button.active{background:var(--orange-600);color:#fff;box-shadow:0 2px 8px rgba(232,74,39,0.5);}
+
+.header-spacer{flex:1;}
+.header-actions{display:flex;gap:8px;align-items:center;z-index:1;}
+.btn-reset{
+  background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.25);color:rgba(255,255,255,0.85);
+  padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.02em;
+}
+.btn-reset:hover{background:rgba(255,255,255,0.18);color:#fff;}
+
+.layout{flex:1;display:flex;min-height:0;}
+.sidebar{
+  width:250px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);
+  padding:18px 14px;overflow-y:auto;
+}
+.upcoming-panel{
+  width:270px;flex-shrink:0;background:var(--card);border-left:1px solid var(--border);
+  padding:18px 16px;overflow-y:auto;
+}
+main#main-content{flex:1;overflow-y:auto;padding:22px 26px;min-width:0;}
+
+.section-label{
+  font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-faint);margin:0 0 10px 2px;
+}
+.sidebar-section{margin-bottom:24px;}
+
+.board-row{
+  display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:var(--radius-sm);
+  cursor:pointer;margin-bottom:2px;transition:background .12s;
+}
+.board-row:hover{background:var(--blue-100);}
+.board-row.active{background:var(--blue-800);color:#fff;}
+.board-row.active .board-count{color:rgba(255,255,255,0.7);}
+.board-row.active .board-actions button{color:rgba(255,255,255,0.75);}
+.color-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,0.08);}
+.board-name{flex:1;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.board-count{font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);}
+.board-actions{display:none;gap:4px;}
+.board-row:hover .board-actions{display:flex;}
+.board-actions button{border:none;background:none;color:var(--text-faint);font-size:13px;padding:2px 4px;border-radius:4px;}
+.board-actions button:hover{color:var(--blue-800);background:rgba(0,0,0,0.06);}
+
+.btn-add-board{
+  width:100%;text-align:left;padding:9px 10px;border-radius:var(--radius-sm);border:1.5px dashed var(--border);
+  background:transparent;color:var(--text-muted);font-weight:600;font-size:13px;margin-top:6px;
+}
+.btn-add-board:hover{border-color:var(--orange-500);color:var(--orange-600);background:var(--orange-100);}
+
+.btn-reset-mini{
+  width:100%;text-align:left;padding:9px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:transparent;color:var(--text-muted);font-weight:600;font-size:12.5px;margin-top:18px;
+}
+.btn-reset-mini:hover{border-color:#DC2626;color:#DC2626;}
+
+/* Upcoming panel */
+.upcoming-item{
+  display:flex;gap:10px;align-items:flex-start;padding:10px 6px;border-bottom:1px solid var(--border);cursor:pointer;
+}
+.upcoming-item:last-child{border-bottom:none;}
+.upcoming-item:hover .upcoming-title{color:var(--orange-600);}
+.upcoming-date{
+  font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--blue-800);
+  background:var(--blue-100);border-radius:6px;padding:5px 6px;text-align:center;line-height:1.1;min-width:38px;
+}
+.upcoming-date .day{display:block;font-size:14px;}
+.upcoming-body{flex:1;min-width:0;}
+.upcoming-title{font-weight:600;font-size:13px;color:var(--text);transition:color .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.upcoming-board{font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:5px;margin-top:2px;}
+.empty-note{color:var(--text-faint);font-size:12.5px;padding:8px 2px;}
+
+/* ========================= Buttons / forms ========================= */
+.btn{
+  border:1px solid var(--border);background:var(--card);color:var(--text);
+  padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;transition:all .12s;
+}
+.btn:hover{border-color:var(--blue-600);color:var(--blue-800);}
+.btn-primary{background:var(--orange-600);border-color:var(--orange-600);color:#fff;}
+.btn-primary:hover{background:var(--orange-700);border-color:var(--orange-700);color:#fff;}
+.btn-secondary{background:var(--blue-800);border-color:var(--blue-800);color:#fff;}
+.btn-secondary:hover{background:var(--blue-900);border-color:var(--blue-900);color:#fff;}
+.btn-danger{color:#DC2626;border-color:#FCA5A5;background:#FEF2F2;}
+.btn-danger:hover{background:#FEE2E2;border-color:#DC2626;}
+.btn-sm{padding:6px 12px;font-size:12px;}
+.btn-icon{width:30px;height:30px;padding:0;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;}
+
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+.toolbar .grow{flex:1;}
+.page-title{font-family:var(--font-heading);font-weight:700;font-size:22px;margin:0;}
+
+input[type=text],input[type=date],input[type=number],input[type=email],select,textarea{
+  border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:#fff;color:var(--text);width:100%;
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue-600);box-shadow:0 0 0 3px rgba(46,90,136,0.12);}
+label{font-size:12.5px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:5px;}
+.field{margin-bottom:14px;}
+.field-row{display:flex;gap:12px;}
+.field-row .field{flex:1;}
+
+/* ========================= Modal ========================= */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(10,20,40,0.45);display:flex;align-items:center;justify-content:center;
+  z-index:100;padding:20px;
+}
+.modal{
+  background:#fff;border-radius:16px;width:100%;max-width:460px;max-height:88vh;overflow-y:auto;
+  box-shadow:var(--shadow-md);
+}
+.modal.modal-wide{max-width:640px;}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);}
+.modal-header h3{margin:0;font-family:var(--font-heading);font-size:17px;}
+.modal-close{border:none;background:none;font-size:20px;color:var(--text-faint);line-height:1;padding:4px;}
+.modal-close:hover{color:var(--text);}
+.modal-body{padding:20px 22px;}
+.modal-footer{padding:16px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+.modal-footer .push-left{margin-right:auto;}
+
+.color-palette{display:flex;flex-wrap:wrap;gap:8px;}
+.color-swatch{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;}
+.color-swatch.selected{border-color:var(--text);box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--text);}
+
+/* ========================= Calendar ========================= */
+.cal-nav{display:flex;align-items:center;gap:10px;}
+.cal-month-label{font-family:var(--font-mono);font-weight:700;font-size:15px;min-width:170px;text-align:center;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--border);gap:1px;}
+.cal-dow{background:var(--blue-800);color:#fff;text-align:center;padding:8px 0;font-size:11px;font-weight:700;letter-spacing:.06em;font-family:var(--font-mono);}
+.cal-cell{background:#fff;min-height:112px;padding:6px;display:flex;flex-direction:column;gap:4px;cursor:pointer;position:relative;}
+.cal-cell:hover{background:#FAFBFF;}
+.cal-cell.other-month{background:#F8FAFC;}
+.cal-cell.other-month .cal-daynum{color:var(--text-faint);}
+.cal-cell.today{outline:2px solid var(--orange-600);outline-offset:-2px;}
+.cal-daynum{font-family:var(--font-mono);font-weight:700;font-size:12.5px;color:var(--text-muted);}
+.cal-cell.today .cal-daynum{color:var(--orange-600);}
+.cal-chips{display:flex;flex-direction:column;gap:3px;overflow-y:auto;max-height:78px;}
+.cal-chip{
+  font-size:11px;padding:3px 6px;border-radius:5px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.cal-chip:hover{filter:brightness(1.1);}
+
+/* ========================= List view ========================= */
+.list-month-header{font-family:var(--font-heading);font-weight:700;font-size:16px;margin:22px 0 8px;color:var(--blue-800);}
+.list-month-header:first-child{margin-top:0;}
+.list-row{
+  display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:11px 14px;margin-bottom:7px;cursor:pointer;
+}
+.list-row:hover{border-color:var(--blue-600);box-shadow:var(--shadow);}
+.list-date{font-family:var(--font-mono);font-weight:700;font-size:12.5px;color:var(--blue-800);width:64px;flex-shrink:0;}
+.list-title{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.list-board{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-shrink:0;}
+
+/* ========================= Board (kanban) ========================= */
+.board-columns{display:flex;gap:16px;align-items:flex-start;overflow-x:auto;padding-bottom:12px;}
+.kanban-col{
+  background:#EEF1F7;border-radius:var(--radius);width:270px;flex-shrink:0;padding:12px;min-height:120px;
+}
+.kanban-col-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:0 2px;}
+.kanban-col-title{font-family:var(--font-heading);font-weight:700;font-size:13.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kanban-count{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);background:#fff;border-radius:999px;padding:2px 7px;}
+.kanban-card{
+  background:#fff;border-radius:9px;padding:10px 12px;margin-bottom:8px;box-shadow:var(--shadow);border-left:4px solid var(--blue-800);
+  cursor:grab;
+}
+.kanban-card:hover{box-shadow:var(--shadow-md);}
+.kanban-card.dragging{opacity:.4;}
+.kanban-card-title{font-weight:600;font-size:13px;margin-bottom:3px;}
+.kanban-card-date{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);}
+.kanban-col.dragover{outline:2px dashed var(--orange-500);outline-offset:-4px;}
+.kanban-add{width:100%;background:transparent;border:1.5px dashed #C7CEDB;border-radius:8px;padding:8px;font-size:12.5px;color:var(--text-muted);font-weight:600;}
+.kanban-add:hover{border-color:var(--orange-500);color:var(--orange-600);}
+
+/* ========================= Data tables (attendance/budget) ========================= */
+.data-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:#fff;}
+table.data-table{width:100%;border-collapse:collapse;font-size:13px;min-width:600px;}
+table.data-table th{
+  background:var(--blue-800);color:#fff;text-align:left;padding:10px 12px;font-weight:600;font-size:12px;
+  white-space:nowrap;position:sticky;top:0;
+}
+table.data-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+table.data-table tbody tr:hover{background:#FAFBFF;}
+table.data-table input, table.data-table select{border:1px solid transparent;background:transparent;padding:6px 7px;border-radius:6px;width:100%;min-width:90px;}
+table.data-table input:hover, table.data-table select:hover{border-color:var(--border);}
+table.data-table input:focus, table.data-table select:focus{border-color:var(--blue-600);background:#fff;}
+table.data-table tfoot td{font-weight:700;font-family:var(--font-mono);background:#F8FAFC;border-top:2px solid var(--border);}
+.row-action{border:none;background:none;color:var(--text-faint);font-size:13px;padding:4px 6px;border-radius:6px;}
+.row-action:hover{color:#DC2626;background:#FEF2F2;}
+
+.two-col{display:flex;gap:20px;align-items:flex-start;min-height:0;}
+.side-list{width:250px;flex-shrink:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px;}
+.side-list-item{padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:2px;display:flex;justify-content:space-between;gap:6px;}
+.side-list-item:hover{background:var(--blue-100);}
+.side-list-item.active{background:var(--blue-800);color:#fff;}
+.side-list-item .sub{font-weight:400;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);}
+.side-list-item.active .sub{color:rgba(255,255,255,0.7);}
+.content-col{flex:1;min-width:0;}
+
+.tabs{display:flex;gap:4px;background:#EEF1F7;padding:4px;border-radius:10px;width:fit-content;margin-bottom:16px;}
+.tabs button{border:none;background:transparent;padding:8px 16px;border-radius:8px;font-weight:600;font-size:13px;color:var(--text-muted);}
+.tabs button.active{background:#fff;color:var(--blue-800);box-shadow:var(--shadow);}
+
+.stat-cards{display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;min-width:150px;flex:1;}
+.stat-card .label{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
+.stat-card .value{font-family:var(--font-heading);font-size:22px;font-weight:700;margin-top:4px;}
+.stat-card.income .value{color:var(--blue-800);}
+.stat-card.expense .value{color:var(--orange-600);}
+.stat-card.net .value{color:#0F8A5F;}
+
+.chart-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;}
+.chart-card h4{margin:0 0 14px;font-family:var(--font-heading);font-size:15px;}
+.legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:12px;}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);}
+.legend-swatch{width:11px;height:11px;border-radius:3px;flex-shrink:0;}
+
+.empty-state{text-align:center;padding:50px 20px;color:var(--text-muted);}
+.empty-state .big{font-size:32px;margin-bottom:8px;}
+
+@media (max-width: 1100px){ .upcoming-panel{display:none !important;} }
+@media (max-width: 780px){ .sidebar{display:none !important;} .two-col{flex-direction:column;} .side-list{width:100%;} }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="app-header" id="app-header"></header>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main id="main-content"></main>
+    <aside class="upcoming-panel" id="upcoming-panel"></aside>
+  </div>
+</div>
+<div id="modal-root"></div>
+<input type="file" id="file-import-input" accept=".csv,.xlsx,.xls" style="display:none;">
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   Constants & defaults
+   ============================================================ */
+var STORAGE_KEY = "dpiTeacherCalendarState_v1";
+
+var DEFAULT_BOARDS = [
+  { id: "board-cs-educator",  name: "CS Educator Workshop Series", color: "#13294B" },
+  { id: "board-newsletters",  name: "Newsletters",                 color: "#E84A27" },
+  { id: "board-conferences",  name: "Conferences",                 color: "#2E5A88" },
+  { id: "board-summer",       name: "Summer Intensives",           color: "#F1793F" },
+  { id: "board-quantum",      name: "Quantum Workshops",           color: "#6B8CB8" },
+  { id: "board-ai-ambass",    name: "AI Ambassadors",              color: "#F5A671" }
+];
+
+function defaultEvents(){
+  return [
+    { id: "evt-summer-intensive", title: "Summer Intensive",       date: "2027-07-12", boardId: "board-summer",      notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-cs-workshop-1",    title: "CS Educator Workshop 1", date: "2026-09-18", boardId: "board-cs-educator", notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-cs-workshop-2",    title: "CS Educator Workshop 2", date: "2026-11-13", boardId: "board-cs-educator", notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-cs-workshop-3",    title: "CS Educator Workshop 3", date: "2027-02-12", boardId: "board-cs-educator", notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-cs-workshop-4",    title: "CS Educator Workshop 4", date: "2027-04-16", boardId: "board-cs-educator", notes: "", attendeeIds: [], budgetItems: [] }
+  ];
+}
+
+function defaultState(){
+  return {
+    title: "DPI Teacher Training Calendar",
+    boards: JSON.parse(JSON.stringify(DEFAULT_BOARDS)),
+    events: defaultEvents(),
+    participants: [],
+    customFields: [],
+    boardFilter: null,
+    currentView: "calendar",
+    calendarCursor: "2026-08"
+  };
+}
+
+var CATEGORY_PALETTE = ["#13294B","#E84A27","#2E5A88","#F1793F","#6B8CB8","#F5A671","#0F8A5F","#8B5CF6","#C43D1F","#94A3B8"];
+
+/* ============================================================
+   Persistence (with bootstrap defaults + retry-on-failure)
+   ============================================================ */
+function ensureDefaults(loaded){
+  var d = defaultState();
+  var merged = {};
+  Object.keys(d).forEach(function(key){
+    merged[key] = (loaded && loaded[key] !== undefined) ? loaded[key] : d[key];
+  });
+  return merged;
+}
+
+function loadState(){
+  var loaded = null;
+  try{
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) loaded = JSON.parse(raw);
+  }catch(err){
+    console.error("Could not read saved data, falling back to defaults.", err);
+    loaded = null;
+  }
+  return ensureDefaults(loaded);
+}
+
+var saveTimer = null;
+function saveState(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function(){ persist(state, 0); }, 150);
+}
+function persist(data, attempt){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }catch(err){
+    if (attempt < 3){
+      setTimeout(function(){ persist(data, attempt + 1); }, 200 * Math.pow(2, attempt));
+    } else {
+      console.error("Failed to save data after multiple attempts.", err);
+    }
+  }
+}
+
+/* ============================================================
+   Utilities
+   ============================================================ */
+function uid(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return "id-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
+}
+function esc(str){
+  return String(str === null || str === undefined ? "" : str).replace(/[&<>"']/g, function(c){
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+function attr(str){ return esc(str).replace(/`/g, "&#96;"); }
+function todayISO(){
+  var d = new Date();
+  return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+}
+function pad(n){ return n < 10 ? "0" + n : "" + n; }
+function parseISO(iso){
+  var parts = (iso || "1970-01-01").split("-").map(Number);
+  return new Date(parts[0], parts[1]-1, parts[2]);
+}
+function toISO(dateObj){ return dateObj.getFullYear() + "-" + pad(dateObj.getMonth()+1) + "-" + pad(dateObj.getDate()); }
+var MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+var MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var DOW_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function fmtDateLong(iso){
+  if (!iso) return "";
+  var d = parseISO(iso);
+  return MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+}
+function fmtMoney(n){
+  n = Number(n) || 0;
+  var sign = n < 0 ? "-" : "";
+  return sign + "$" + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function boardById(id){ return state.boards.find(function(b){ return b.id === id; }) || null; }
+function boardColor(id){ var b = boardById(id); return b ? b.color : "#94A3B8"; }
+function boardName(id){ var b = boardById(id); return b ? b.name : "Uncategorized"; }
+function eventById(id){ return state.events.find(function(e){ return e.id === id; }); }
+function participantById(id){ return state.participants.find(function(p){ return p.id === id; }); }
+function sortedEvents(){ return state.events.slice().sort(function(a,b){ return (a.date || "").localeCompare(b.date || ""); }); }
+function visibleEvents(){
+  var list = sortedEvents();
+  if (state.boardFilter === "uncategorized") return list.filter(function(e){ return !e.boardId || !boardById(e.boardId); });
+  if (state.boardFilter) return list.filter(function(e){ return e.boardId === state.boardFilter; });
+  return list;
+}
+function budgetTotals(ev){
+  var income = 0, expense = 0;
+  (ev.budgetItems || []).forEach(function(item){
+    var amt = Number(item.amount) || 0;
+    if (item.type === "Income") income += amt; else expense += amt;
+  });
+  return { income: income, expense: expense, net: income - expense };
+}
+
+/* ============================================================
+   State + UI (transient nav state, not persisted)
+   ============================================================ */
+var state = loadState();
+var ui = {
+  attendanceSession: "directory",
+  budgetTab: "overview",
+  budgetDetailId: null,
+  dragEventId: null
+};
+
+/* ============================================================
+   Root render
+   ============================================================ */
+function render(){
+  document.title = state.title || "DPI Teacher Training Calendar";
+  renderHeader();
+  var boardViews = ["calendar","list","board"];
+  var showChrome = boardViews.indexOf(state.currentView) !== -1;
+  document.getElementById("sidebar").style.display = showChrome ? "" : "none";
+  document.getElementById("upcoming-panel").style.display = showChrome ? "" : "none";
+  if (showChrome){ renderSidebar(); renderUpcoming(); }
+  renderMain();
+}
+
+function renderHeader(){
+  var el = document.getElementById("app-header");
+  var views = [["calendar","Calendar"],["list","List"],["board","Board"],["attendance","Attendance"],["budget","Budget"]];
+  el.innerHTML =
+    '<div class="brand">' +
+      '<div class="brand-mark">DPI</div>' +
+      '<div class="title-text" data-action="edit-title" title="Click to rename">' + esc(state.title) + '</div>' +
+    '</div>' +
+    '<div class="view-switcher">' +
+      views.map(function(v){
+        return '<button data-action="switch-view" data-view="'+v[0]+'" class="'+(state.currentView===v[0]?"active":"")+'">'+v[1]+'</button>';
+      }).join("") +
+    '</div>' +
+    '<div class="header-spacer"></div>' +
+    '<div class="header-actions">' +
+      '<button class="btn-reset" data-action="reset-data">Reset all data</button>' +
+    '</div>';
+}
+
+function renderSidebar(){
+  var el = document.getElementById("sidebar");
+  var uncategorizedCount = state.events.filter(function(e){ return !e.boardId || !boardById(e.boardId); }).length;
+  var html = '<div class="sidebar-section">';
+  html += '<div class="section-label">Boards</div>';
+  html += '<div class="board-row ' + (!state.boardFilter ? "active" : "") + '" data-action="board-filter" data-board="">' +
+            '<span class="color-dot" style="background:linear-gradient(135deg,#13294B,#E84A27)"></span>' +
+            '<span class="board-name">All events</span>' +
+            '<span class="board-count">' + state.events.length + '</span>' +
+          '</div>';
+  state.boards.forEach(function(b){
+    var count = state.events.filter(function(e){ return e.boardId === b.id; }).length;
+    html += '<div class="board-row ' + (state.boardFilter===b.id?"active":"") + '" data-action="board-filter" data-board="' + b.id + '">' +
+              '<span class="color-dot" style="background:' + b.color + '"></span>' +
+              '<span class="board-name">' + esc(b.name) + '</span>' +
+              '<span class="board-count">' + count + '</span>' +
+              '<span class="board-actions">' +
+                '<button data-action="edit-board" data-id="' + b.id + '" title="Edit">&#9998;</button>' +
+                '<button data-action="delete-board" data-id="' + b.id + '" title="Delete">&times;</button>' +
+              '</span>' +
+            '</div>';
+  });
+  if (uncategorizedCount > 0){
+    html += '<div class="board-row ' + (state.boardFilter==="uncategorized"?"active":"") + '" data-action="board-filter" data-board="uncategorized">' +
+              '<span class="color-dot" style="background:#94A3B8"></span>' +
+              '<span class="board-name">Uncategorized</span>' +
+              '<span class="board-count">' + uncategorizedCount + '</span>' +
+            '</div>';
+  }
+  html += '<button class="btn-add-board" data-action="add-board">+ Add board</button>';
+  html += '</div>';
+  html += '<button class="btn-reset-mini" data-action="reset-data">Reset all data&hellip;</button>';
+  el.innerHTML = html;
+}
+
+function renderUpcoming(){
+  var el = document.getElementById("upcoming-panel");
+  var today = todayISO();
+  var upcoming = sortedEvents().filter(function(e){ return e.date >= today; }).slice(0, 8);
+  var html = '<div class="section-label">Upcoming</div>';
+  if (!upcoming.length){
+    html += '<div class="empty-note">No upcoming dates.</div>';
+  } else {
+    upcoming.forEach(function(e){
+      var d = parseISO(e.date);
+      html += '<div class="upcoming-item" data-action="edit-event" data-id="' + e.id + '">' +
+                '<div class="upcoming-date">' + MONTH_SHORT[d.getMonth()] + '<span class="day">' + d.getDate() + '</span></div>' +
+                '<div class="upcoming-body">' +
+                  '<div class="upcoming-title">' + esc(e.title) + '</div>' +
+                  '<div class="upcoming-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
+                '</div>' +
+              '</div>';
+    });
+  }
+  el.innerHTML = html;
+}
+
+function renderMain(){
+  var el = document.getElementById("main-content");
+  if (state.currentView === "calendar") el.innerHTML = calendarViewHTML();
+  else if (state.currentView === "list") el.innerHTML = listViewHTML();
+  else if (state.currentView === "board") el.innerHTML = boardViewHTML();
+  else if (state.currentView === "attendance") el.innerHTML = attendanceViewHTML();
+  else if (state.currentView === "budget") el.innerHTML = budgetViewHTML();
+  if (state.currentView === "board") wireBoardDnD();
+}
+
+/* ============================================================
+   Calendar view
+   ============================================================ */
+function calendarViewHTML(){
+  var cursor = state.calendarCursor || todayISO().slice(0,7);
+  var parts = cursor.split("-").map(Number);
+  var year = parts[0], month = parts[1]-1;
+  var firstOfMonth = new Date(year, month, 1);
+  var startOffset = firstOfMonth.getDay();
+  var gridStart = new Date(year, month, 1 - startOffset);
+  var today = todayISO();
+  var evByDate = {};
+  visibleEvents().forEach(function(e){
+    (evByDate[e.date] = evByDate[e.date] || []).push(e);
+  });
+
+  var html = '<div class="toolbar">' +
+    '<h2 class="page-title">Calendar</h2>' +
+    '<div class="grow"></div>' +
+    '<div class="cal-nav">' +
+      '<button class="btn btn-icon" data-action="nav-month" data-dir="-1">&larr;</button>' +
+      '<div class="cal-month-label">' + MONTH_NAMES[month] + ' ' + year + '</div>' +
+      '<button class="btn btn-icon" data-action="nav-month" data-dir="1">&rarr;</button>' +
+      '<button class="btn" data-action="nav-today">Today</button>' +
+    '</div>' +
+    '<button class="btn btn-primary" data-action="add-event" data-date="">+ New event</button>' +
+  '</div>';
+
+  html += '<div class="cal-grid">';
+  DOW_SHORT.forEach(function(d){ html += '<div class="cal-dow">' + d + '</div>'; });
+  for (var i = 0; i < 42; i++){
+    var cellDate = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+    var iso = toISO(cellDate);
+    var otherMonth = cellDate.getMonth() !== month;
+    var dayEvents = evByDate[iso] || [];
+    html += '<div class="cal-cell ' + (otherMonth?"other-month":"") + ' ' + (iso===today?"today":"") + '" data-action="add-event" data-date="' + iso + '">' +
+              '<div class="cal-daynum">' + cellDate.getDate() + '</div>' +
+              '<div class="cal-chips">' +
+                dayEvents.map(function(e){
+                  return '<div class="cal-chip" style="background:' + boardColor(e.boardId) + '" data-action="edit-event" data-id="' + e.id + '" data-stop="1">' + esc(e.title) + '</div>';
+                }).join("") +
+              '</div>' +
+            '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ============================================================
+   List view
+   ============================================================ */
+function listViewHTML(){
+  var events = visibleEvents();
+  var html = '<div class="toolbar"><h2 class="page-title">List</h2><div class="grow"></div><button class="btn btn-primary" data-action="add-event" data-date="">+ New event</button></div>';
+  if (!events.length){
+    html += emptyState("No events yet.", "Create your first event to get started.");
+    return html;
+  }
+  var lastMonth = null;
+  events.forEach(function(e){
+    var d = parseISO(e.date);
+    var monthKey = MONTH_NAMES[d.getMonth()] + " " + d.getFullYear();
+    if (monthKey !== lastMonth){
+      html += '<div class="list-month-header">' + monthKey + '</div>';
+      lastMonth = monthKey;
+    }
+    html += '<div class="list-row" data-action="edit-event" data-id="' + e.id + '">' +
+              '<div class="list-date">' + MONTH_SHORT[d.getMonth()].toUpperCase() + ' ' + pad(d.getDate()) + '</div>' +
+              '<div class="list-title">' + esc(e.title) + '</div>' +
+              '<div class="list-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
+            '</div>';
+  });
+  return html;
+}
+
+/* ============================================================
+   Board (kanban) view
+   ============================================================ */
+function boardViewHTML(){
+  var cols = state.boards.slice();
+  if (state.boardFilter && state.boardFilter !== "uncategorized"){
+    cols = cols.filter(function(b){ return b.id === state.boardFilter; });
+  }
+  var showUncategorized = !state.boardFilter || state.boardFilter === "uncategorized";
+  var html = '<div class="toolbar"><h2 class="page-title">Board</h2><div class="grow"></div><button class="btn btn-primary" data-action="add-event" data-date="">+ New event</button></div>';
+  html += '<div class="board-columns">';
+  cols.forEach(function(b){
+    var events = sortedEvents().filter(function(e){ return e.boardId === b.id; });
+    html += kanbanColumnHTML(b.id, b.name, b.color, events);
+  });
+  if (showUncategorized){
+    var uncEvents = sortedEvents().filter(function(e){ return !e.boardId || !boardById(e.boardId); });
+    if (uncEvents.length || !state.boardFilter){
+      html += kanbanColumnHTML("", "Uncategorized", "#94A3B8", uncEvents);
+    }
+  }
+  html += '</div>';
+  return html;
+}
+function kanbanColumnHTML(boardId, name, color, events){
+  var html = '<div class="kanban-col" data-board-col="' + boardId + '">' +
+    '<div class="kanban-col-header">' +
+      '<span class="color-dot" style="background:' + color + '"></span>' +
+      '<span class="kanban-col-title">' + esc(name) + '</span>' +
+      '<span class="kanban-count">' + events.length + '</span>' +
+    '</div>';
+  events.forEach(function(e){
+    html += '<div class="kanban-card" draggable="true" data-event-id="' + e.id + '" style="border-left-color:' + color + '" data-action="edit-event" data-id="' + e.id + '">' +
+              '<div class="kanban-card-title">' + esc(e.title) + '</div>' +
+              '<div class="kanban-card-date">' + fmtDateLong(e.date) + '</div>' +
+            '</div>';
+  });
+  html += '<button class="kanban-add" data-action="add-event" data-date="" data-board="' + boardId + '">+ Add card</button>';
+  html += '</div>';
+  return html;
+}
+function wireBoardDnD(){
+  var cards = document.querySelectorAll(".kanban-card");
+  cards.forEach(function(card){
+    card.addEventListener("dragstart", function(e){
+      ui.dragEventId = card.getAttribute("data-event-id");
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", function(){ card.classList.remove("dragging"); });
+  });
+  var cols = document.querySelectorAll(".kanban-col");
+  cols.forEach(function(col){
+    col.addEventListener("dragover", function(e){ e.preventDefault(); col.classList.add("dragover"); });
+    col.addEventListener("dragleave", function(){ col.classList.remove("dragover"); });
+    col.addEventListener("drop", function(e){
+      e.preventDefault();
+      col.classList.remove("dragover");
+      var boardId = col.getAttribute("data-board-col") || null;
+      var ev = eventById(ui.dragEventId);
+      if (ev){
+        ev.boardId = boardId || null;
+        saveState();
+        render();
+      }
+    });
+  });
+}
+
+/* ============================================================
+   Shared: empty state
+   ============================================================ */
+function emptyState(title, sub){
+  return '<div class="empty-state"><div class="big">&#128197;</div><div style="font-weight:700;font-size:15px;margin-bottom:4px;">' + esc(title) + '</div><div>' + esc(sub) + '</div></div>';
+}
+
+/* ============================================================
+   Attendance view
+   ============================================================ */
+function attendanceViewHTML(){
+  var sessions = sortedEvents();
+  var html = '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
+    '<button class="btn" data-action="add-field">+ Add info field</button>' +
+    '<button class="btn" data-action="download-template">Download template</button>' +
+    '<button class="btn btn-secondary" data-action="import-file">Import spreadsheet</button>' +
+  '</div>';
+  html += '<div class="two-col">';
+  html += '<div class="side-list">';
+  html += '<div class="side-list-item ' + (ui.attendanceSession==="directory"?"active":"") + '" data-action="attendance-select" data-id="directory">All Participants <span class="sub">' + state.participants.length + '</span></div>';
+  sessions.forEach(function(e){
+    html += '<div class="side-list-item ' + (ui.attendanceSession===e.id?"active":"") + '" data-action="attendance-select" data-id="' + e.id + '">' +
+              esc(e.title) + '<span class="sub">' + (e.attendeeIds||[]).length + '</span>' +
+            '</div>';
+  });
+  html += '</div>';
+  html += '<div class="content-col">';
+  if (ui.attendanceSession === "directory"){
+    html += directoryTableHTML();
+  } else {
+    var session = eventById(ui.attendanceSession);
+    if (!session){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
+    else html += sessionRosterHTML(session);
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function tableHeaderCells(){
+  var cells = '<th>Name</th><th>School</th><th>Email</th><th>IEIN</th>';
+  state.customFields.forEach(function(f){ cells += '<th>' + esc(f) + '</th>'; });
+  return cells;
+}
+
+function directoryTableHTML(){
+  if (!state.participants.length){
+    return emptyState("No participants yet.", "Add attendees from a session, or import a spreadsheet.");
+  }
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+    tableHeaderCells() + '<th>Sessions</th><th></th>' +
+    '</tr></thead><tbody>';
+  state.participants.forEach(function(p){
+    var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
+    html += '<tr>' + participantCells(p) +
+      '<td style="font-family:var(--font-mono);text-align:center;">' + sessionCount + '</td>' +
+      '<td><button class="row-action" data-action="delete-participant" data-id="' + p.id + '" title="Delete participant">&times;</button></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function participantCells(p){
+  var html = '';
+  html += '<td><input type="text" value="' + attr(p.name) + '" data-field="name" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.school||"") + '" data-field="school" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.email||"") + '" data-field="email" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.iein||"") + '" data-field="iein" data-participant="' + p.id + '"></td>';
+  state.customFields.forEach(function(f){
+    var val = (p.custom && p.custom[f]) || "";
+    html += '<td><input type="text" value="' + attr(val) + '" data-customfield="' + attr(f) + '" data-participant="' + p.id + '"></td>';
+  });
+  return html;
+}
+
+function sessionRosterHTML(session){
+  var attendees = (session.attendeeIds || []).map(participantById).filter(Boolean);
+  var html = '<div class="toolbar" style="margin-bottom:14px;">' +
+    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(session.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + fmtDateLong(session.date) + '</span></h3>' +
+    '<div class="grow"></div>' +
+    '<button class="btn btn-sm" data-action="add-existing-attendee" data-id="' + session.id + '">+ Add existing</button>' +
+    '<button class="btn btn-sm btn-primary" data-action="add-new-attendee" data-id="' + session.id + '">+ Add attendee</button>' +
+  '</div>';
+  if (!attendees.length){
+    html += emptyState("No attendees enrolled.", "Add a new attendee or bring in someone from the directory.");
+    return html;
+  }
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' + tableHeaderCells() + '<th></th></tr></thead><tbody>';
+  attendees.forEach(function(p){
+    html += '<tr>' + participantCells(p) +
+      '<td><button class="row-action" data-action="remove-attendance" data-event="' + session.id + '" data-participant="' + p.id + '" title="Remove from session">&times;</button></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+/* ============================================================
+   Budget view
+   ============================================================ */
+function budgetViewHTML(){
+  var html = '<div class="toolbar"><h2 class="page-title">Budget</h2><div class="grow"></div>' +
+    '<button class="btn btn-primary" data-action="add-event" data-date="" data-context="budget">+ New event</button>' +
+  '</div>';
+  html += '<div class="tabs">' +
+    '<button class="' + (ui.budgetTab==="overview"?"active":"") + '" data-action="budget-tab" data-tab="overview">Overview</button>' +
+    '<button class="' + (ui.budgetTab==="charts"?"active":"") + '" data-action="budget-tab" data-tab="charts">Charts</button>' +
+  '</div>';
+  if (ui.budgetTab === "detail" && ui.budgetDetailId && eventById(ui.budgetDetailId)){
+    html += budgetDetailHTML(eventById(ui.budgetDetailId));
+  } else if (ui.budgetTab === "charts"){
+    html += budgetChartsHTML();
+  } else {
+    ui.budgetTab = "overview";
+    html += budgetOverviewHTML();
+  }
+  return html;
+}
+
+function budgetOverviewHTML(){
+  var events = sortedEvents();
+  if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
+  var grandIncome = 0, grandExpense = 0;
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody>';
+  events.forEach(function(e){
+    var t = budgetTotals(e);
+    grandIncome += t.income; grandExpense += t.expense;
+    html += '<tr>' +
+      '<td><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
+      '<td style="font-family:var(--font-mono);">' + fmtDateLong(e.date) + '</td>' +
+      '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
+      '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
+      '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
+      '</tr>';
+  });
+  html += '</tbody><tfoot><tr><td colspan="2">Grand total</td>' +
+    '<td>' + fmtMoney(grandIncome) + '</td><td>' + fmtMoney(grandExpense) + '</td>' +
+    '<td style="color:' + ((grandIncome-grandExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(grandIncome-grandExpense) + '</td></tr></tfoot>';
+  html += '</table></div>';
+  return html;
+}
+
+function budgetDetailHTML(ev){
+  var t = budgetTotals(ev);
+  var html = '<div class="toolbar" style="margin-bottom:14px;">' +
+    '<button class="btn btn-sm" data-action="budget-tab" data-tab="overview">&larr; Overview</button>' +
+    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(ev.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + fmtDateLong(ev.date) + '</span></h3>' +
+    '<div class="grow"></div>' +
+    '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
+  '</div>';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="budget-rows-body">';
+  (ev.budgetItems || []).forEach(function(item){
+    html += budgetRowHTML(ev.id, item);
+  });
+  html += '</tbody><tfoot>' +
+    '<tr><td colspan="3">Income</td><td id="bt-income">' + fmtMoney(t.income) + '</td><td></td></tr>' +
+    '<tr><td colspan="3">Expenses</td><td id="bt-expense">' + fmtMoney(t.expense) + '</td><td></td></tr>' +
+    '<tr><td colspan="3">Net</td><td id="bt-net" style="color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td><td></td></tr>' +
+    '</tfoot></table></div>';
+  return html;
+}
+function budgetRowHTML(eventId, item){
+  return '<tr data-item-row="' + item.id + '">' +
+    '<td><input type="text" value="' + attr(item.description||"") + '" data-budget-field="description" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.category||"") + '" data-budget-field="category" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><select data-budget-field="type" data-event="' + eventId + '" data-item="' + item.id + '">' +
+      '<option value="Expense" ' + (item.type==="Expense"?"selected":"") + '>Expense</option>' +
+      '<option value="Income" ' + (item.type==="Income"?"selected":"") + '>Income</option>' +
+    '</select></td>' +
+    '<td><input type="number" step="0.01" value="' + (item.amount||0) + '" data-budget-field="amount" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><button class="row-action" data-action="remove-budget-row" data-event="' + eventId + '" data-item="' + item.id + '">&times;</button></td>' +
+    '</tr>';
+}
+
+function budgetChartsHTML(){
+  var events = sortedEvents();
+  var hasData = events.some(function(e){ return (e.budgetItems||[]).length; });
+  if (!hasData) return emptyState("No budget data yet.", "Add line items to an event's budget to see charts here.");
+  var html = '<div class="chart-card"><h4>Income vs. Expenses by Event</h4>' + barChartSVG(events) + '</div>';
+  html += '<div class="chart-card"><h4>Expenses by Category</h4>' + donutChartSVG(events) + '</div>';
+  return html;
+}
+
+function barChartSVG(events){
+  var data = events.map(function(e){ var t = budgetTotals(e); return { name: e.title, income: t.income, expense: t.expense }; })
+                    .filter(function(d){ return d.income || d.expense; });
+  if (!data.length) return emptyState("No budget data yet.", "");
+  var w = 720, h = 320, padL = 60, padB = 70, padT = 20, padR = 20;
+  var chartW = w - padL - padR, chartH = h - padT - padB;
+  var maxVal = Math.max.apply(null, data.map(function(d){ return Math.max(d.income, d.expense); }).concat([1]));
+  var niceMax = Math.ceil(maxVal / 5) * 5 || 5;
+  var groupW = chartW / data.length;
+  var barW = Math.min(34, groupW / 3);
+  var svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;max-width:760px;" font-family="Inter, sans-serif">';
+  for (var g = 0; g <= 4; g++){
+    var gy = padT + chartH - (chartH * g / 4);
+    var gval = niceMax * g / 4;
+    svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (w-padR) + '" y2="' + gy + '" stroke="#E2E8F0" stroke-width="1"/>';
+    svg += '<text x="' + (padL-8) + '" y="' + (gy+4) + '" font-size="10" fill="#64748B" text-anchor="end">' + Math.round(gval).toLocaleString() + '</text>';
+  }
+  data.forEach(function(d, i){
+    var cx = padL + groupW * i + groupW/2;
+    var incH = (d.income / niceMax) * chartH;
+    var expH = (d.expense / niceMax) * chartH;
+    var ix = cx - barW - 3, ex = cx + 3;
+    svg += '<rect x="' + ix + '" y="' + (padT+chartH-incH) + '" width="' + barW + '" height="' + incH + '" fill="#13294B" rx="3"/>';
+    svg += '<rect x="' + ex + '" y="' + (padT+chartH-expH) + '" width="' + barW + '" height="' + expH + '" fill="#E84A27" rx="3"/>';
+    var label = d.name.length > 14 ? d.name.slice(0,13) + "…" : d.name;
+    svg += '<text x="' + cx + '" y="' + (padT+chartH+18) + '" font-size="10.5" fill="#1A202C" text-anchor="middle">' + esc(label) + '</text>';
+  });
+  svg += '<line x1="' + padL + '" y1="' + (padT+chartH) + '" x2="' + (w-padR) + '" y2="' + (padT+chartH) + '" stroke="#94A3B8" stroke-width="1.5"/>';
+  svg += '</svg>';
+  var legend = '<div class="legend">' +
+    '<div class="legend-item"><span class="legend-swatch" style="background:#13294B"></span>Income</div>' +
+    '<div class="legend-item"><span class="legend-swatch" style="background:#E84A27"></span>Expenses</div>' +
+    '</div>';
+  return svg + legend;
+}
+
+function donutChartSVG(events){
+  var totals = {};
+  events.forEach(function(e){
+    (e.budgetItems||[]).forEach(function(item){
+      if (item.type !== "Expense") return;
+      var cat = (item.category || "").trim() || "Uncategorized";
+      totals[cat] = (totals[cat] || 0) + (Number(item.amount) || 0);
+    });
+  });
+  var cats = Object.keys(totals).filter(function(c){ return totals[c] > 0; }).sort(function(a,b){ return totals[b]-totals[a]; });
+  if (!cats.length) return emptyState("No expense data yet.", "");
+  var grand = cats.reduce(function(s,c){ return s + totals[c]; }, 0);
+  var r = 80, cx = 110, cy = 110, circumference = 2 * Math.PI * r, strokeW = 34;
+  var offset = 0;
+  var svg = '<svg viewBox="0 0 220 220" style="width:220px;height:220px;flex-shrink:0;">' +
+    '<g transform="rotate(-90 110 110)">';
+  cats.forEach(function(cat, i){
+    var frac = totals[cat] / grand;
+    var dash = frac * circumference;
+    var color = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length];
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + strokeW + '" ' +
+      'stroke-dasharray="' + dash + ' ' + (circumference-dash) + '" stroke-dashoffset="' + (-offset) + '"/>';
+    offset += dash;
+  });
+  svg += '</g>';
+  svg += '<text x="110" y="104" text-anchor="middle" font-size="12" fill="#64748B" font-family="JetBrains Mono, monospace">TOTAL</text>';
+  svg += '<text x="110" y="126" text-anchor="middle" font-size="17" font-weight="700" fill="#1A202C" font-family="Sora, sans-serif">' + fmtMoney(grand) + '</text>';
+  svg += '</svg>';
+  var legend = '<div class="legend">';
+  cats.forEach(function(cat, i){
+    var pct = Math.round((totals[cat] / grand) * 100);
+    legend += '<div class="legend-item"><span class="legend-swatch" style="background:' + CATEGORY_PALETTE[i % CATEGORY_PALETTE.length] + '"></span>' + esc(cat) + ' &mdash; ' + fmtMoney(totals[cat]) + ' (' + pct + '%)</div>';
+  });
+  legend += '</div>';
+  return '<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">' + svg + '<div style="flex:1;min-width:200px;">' + legend + '</div></div>';
+}
+
+/* ============================================================
+   Modal system
+   ============================================================ */
+function openModal(html, wide){
+  document.getElementById("modal-root").innerHTML =
+    '<div class="modal-overlay" data-action="close-modal-overlay">' +
+      '<div class="modal ' + (wide?"modal-wide":"") + '" data-stop="1">' + html + '</div>' +
+    '</div>';
+  var firstInput = document.querySelector(".modal input, .modal select, .modal textarea");
+  if (firstInput) setTimeout(function(){ firstInput.focus(); }, 30);
+}
+function closeModal(){ document.getElementById("modal-root").innerHTML = ""; }
+
+function eventModalHTML(eventId, prefillDate, prefillBoard){
+  var ev = eventId ? eventById(eventId) : null;
+  var isNew = !ev;
+  var boardOptions = '<option value="">Uncategorized</option>' + state.boards.map(function(b){
+    return '<option value="' + b.id + '" ' + ((ev?ev.boardId:prefillBoard)===b.id?"selected":"") + '>' + esc(b.name) + '</option>';
+  }).join("");
+  return '<form id="event-form" data-action="submit-event-form" data-id="' + (ev?ev.id:"") + '">' +
+    '<div class="modal-header"><h3>' + (isNew?"New event":"Edit event") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Title</label><input type="text" name="title" required value="' + attr(ev?ev.title:"") + '" placeholder="e.g. CS Educator Workshop 5"></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>Date</label><input type="date" name="date" required value="' + (ev?ev.date:(prefillDate||todayISO())) + '"></div>' +
+        '<div class="field"><label>Board</label><select name="boardId">' + boardOptions + '</select></div>' +
+      '</div>' +
+      '<div class="field"><label>Notes</label><textarea name="notes" rows="3" placeholder="Optional details">' + esc(ev?ev.notes:"") + '</textarea></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      (ev ? '<button type="button" class="btn btn-danger push-left" data-action="delete-event" data-id="' + ev.id + '">Delete</button>' : '') +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">' + (isNew?"Create event":"Save changes") + '</button>' +
+    '</div>' +
+  '</form>';
+}
+
+function boardModalHTML(boardId){
+  var b = boardId ? boardById(boardId) : null;
+  var isNew = !b;
+  var swatches = CATEGORY_PALETTE.concat(["#F5A576","#94A3B8","#0F8A5F","#F59E0B"]);
+  var selectedColor = b ? b.color : swatches[0];
+  var html = '<form id="board-form" data-action="submit-board-form" data-id="' + (b?b.id:"") + '">' +
+    '<div class="modal-header"><h3>' + (isNew?"Add board":"Edit board") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Name</label><input type="text" name="name" required value="' + attr(b?b.name:"") + '" placeholder="e.g. Regional Meetups"></div>' +
+      '<div class="field"><label>Color</label><div class="color-palette" id="color-palette">' +
+        swatches.map(function(c){ return '<div class="color-swatch ' + (c===selectedColor?"selected":"") + '" style="background:' + c + '" data-color="' + c + '" data-action="pick-color"></div>'; }).join("") +
+      '</div>' +
+      '<input type="hidden" name="color" id="color-input" value="' + selectedColor + '">' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">' + (isNew?"Add board":"Save changes") + '</button>' +
+    '</div>' +
+  '</form>';
+  return html;
+}
+
+function attendeeModalHTML(sessionId){
+  return '<form id="attendee-form" data-action="submit-new-attendee" data-event="' + sessionId + '">' +
+    '<div class="modal-header"><h3>Add attendee</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Name</label><input type="text" name="name" required></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>School</label><input type="text" name="school"></div>' +
+        '<div class="field"><label>Email</label><input type="email" name="email"></div>' +
+      '</div>' +
+      '<div class="field"><label>IEIN</label><input type="text" name="iein"></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">Add & enroll</button>' +
+    '</div>' +
+  '</form>';
+}
+
+function existingAttendeeModalHTML(sessionId){
+  var session = eventById(sessionId);
+  var already = session ? (session.attendeeIds||[]) : [];
+  var candidates = state.participants.filter(function(p){ return already.indexOf(p.id) === -1; });
+  var html = '<div class="modal-header"><h3>Add existing participant</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">';
+  if (!candidates.length){
+    html += '<div class="empty-note">Everyone in the directory is already enrolled in this session.</div>';
+  } else {
+    html += '<div style="max-height:320px;overflow-y:auto;">';
+    candidates.forEach(function(p){
+      html += '<div class="side-list-item" style="cursor:pointer;" data-action="enroll-existing" data-event="' + sessionId + '" data-participant="' + p.id + '">' +
+        esc(p.name) + '<span class="sub">' + esc(p.school||"") + '</span></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Close</button></div>';
+  return html;
+}
+
+function addFieldModalHTML(){
+  return '<form id="field-form" data-action="submit-add-field">' +
+    '<div class="modal-header"><h3>Add info field</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Field name</label><input type="text" name="fieldName" required placeholder="e.g. T-shirt size"></div>' +
+    '</div>' +
+    '<div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button type="submit" class="btn btn-primary">Add field</button></div>' +
+  '</form>';
+}
+
+/* ============================================================
+   Actions
+   ============================================================ */
+var ACTIONS = {
+  "switch-view": function(t){ state.currentView = t.getAttribute("data-view"); saveState(); render(); },
+
+  "edit-title": function(t){
+    var span = t;
+    var input = document.createElement("input");
+    input.id = "title-input"; input.type = "text"; input.value = state.title;
+    span.replaceWith(input);
+    input.focus(); input.select();
+    function commit(){ state.title = input.value.trim() || "DPI Teacher Training Calendar"; saveState(); render(); }
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); input.blur(); } if (e.key === "Escape"){ render(); } });
+  },
+
+  "reset-data": function(){
+    if (confirm("This will permanently erase all boards, events, participants, and budgets, and restore the default setup. Continue?")){
+      state = defaultState();
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null };
+      saveState(); render();
+    }
+  },
+
+  "board-filter": function(t){
+    var b = t.getAttribute("data-board");
+    state.boardFilter = b || null;
+    saveState(); render();
+  },
+  "add-board": function(){ openModal(boardModalHTML(null)); },
+  "edit-board": function(t){ openModal(boardModalHTML(t.getAttribute("data-id"))); },
+  "delete-board": function(t){
+    var id = t.getAttribute("data-id");
+    var b = boardById(id);
+    if (!b) return;
+    if (confirm('Delete "' + b.name + '"? Events on this board will become uncategorized (not deleted).')){
+      state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
+      state.boards = state.boards.filter(function(bb){ return bb.id !== id; });
+      if (state.boardFilter === id) state.boardFilter = null;
+      saveState(); render();
+    }
+  },
+  "pick-color": function(t){
+    document.querySelectorAll("#color-palette .color-swatch").forEach(function(s){ s.classList.remove("selected"); });
+    t.classList.add("selected");
+    document.getElementById("color-input").value = t.getAttribute("data-color");
+  },
+  "submit-board-form": function(form){
+    var fd = new FormData(form);
+    var id = form.getAttribute("data-id");
+    var name = (fd.get("name")||"").toString().trim();
+    var color = (fd.get("color")||"#13294B").toString();
+    if (!name) return;
+    if (id){
+      var b = boardById(id);
+      b.name = name; b.color = color;
+    } else {
+      state.boards.push({ id: uid(), name: name, color: color });
+    }
+    saveState(); closeModal(); render();
+  },
+
+  "nav-month": function(t){
+    var dir = parseInt(t.getAttribute("data-dir"), 10);
+    var parts = (state.calendarCursor || todayISO().slice(0,7)).split("-").map(Number);
+    var d = new Date(parts[0], parts[1]-1 + dir, 1);
+    state.calendarCursor = d.getFullYear() + "-" + pad(d.getMonth()+1);
+    saveState(); render();
+  },
+  "nav-today": function(){ state.calendarCursor = todayISO().slice(0,7); saveState(); render(); },
+
+  "add-event": function(t){
+    var date = t.getAttribute("data-date") || todayISO();
+    var boardId = t.getAttribute("data-board") || (state.boardFilter && state.boardFilter !== "uncategorized" ? state.boardFilter : "");
+    openModal(eventModalHTML(null, date, boardId));
+  },
+  "edit-event": function(t){ openModal(eventModalHTML(t.getAttribute("data-id"))); },
+  "submit-event-form": function(form){
+    var fd = new FormData(form);
+    var id = form.getAttribute("data-id");
+    var title = (fd.get("title")||"").toString().trim();
+    var date = (fd.get("date")||"").toString();
+    var boardId = (fd.get("boardId")||"").toString() || null;
+    var notes = (fd.get("notes")||"").toString();
+    if (!title || !date) return;
+    if (id){
+      var e = eventById(id);
+      e.title = title; e.date = date; e.boardId = boardId; e.notes = notes;
+    } else {
+      state.events.push({ id: uid(), title: title, date: date, boardId: boardId, notes: notes, attendeeIds: [], budgetItems: [] });
+    }
+    saveState(); closeModal(); render();
+  },
+  "delete-event": function(t){
+    var id = t.getAttribute("data-id");
+    var e = eventById(id);
+    if (!e) return;
+    if (confirm('Delete "' + e.title + '"? This removes its attendance and budget data too.')){
+      state.events = state.events.filter(function(ev){ return ev.id !== id; });
+      if (ui.attendanceSession === id) ui.attendanceSession = "directory";
+      if (ui.budgetDetailId === id){ ui.budgetDetailId = null; ui.budgetTab = "overview"; }
+      saveState(); closeModal(); render();
+    }
+  },
+
+  "close-modal": function(){ closeModal(); },
+  "close-modal-overlay": function(t, ev){ if (ev.target === t) closeModal(); },
+
+  "attendance-select": function(t){ ui.attendanceSession = t.getAttribute("data-id"); render(); },
+  "add-new-attendee": function(t){ openModal(attendeeModalHTML(t.getAttribute("data-id"))); },
+  "add-existing-attendee": function(t){ openModal(existingAttendeeModalHTML(t.getAttribute("data-id"))); },
+  "submit-new-attendee": function(form){
+    var fd = new FormData(form);
+    var eventId = form.getAttribute("data-event");
+    var name = (fd.get("name")||"").toString().trim();
+    if (!name) return;
+    var p = { id: uid(), name: name, school: (fd.get("school")||"").toString(), email: (fd.get("email")||"").toString(), iein: (fd.get("iein")||"").toString(), custom: {} };
+    state.participants.push(p);
+    var ev = eventById(eventId);
+    if (ev){ ev.attendeeIds = ev.attendeeIds || []; ev.attendeeIds.push(p.id); }
+    saveState(); closeModal(); render();
+  },
+  "enroll-existing": function(t){
+    var eventId = t.getAttribute("data-event");
+    var participantId = t.getAttribute("data-participant");
+    var ev = eventById(eventId);
+    if (ev){
+      ev.attendeeIds = ev.attendeeIds || [];
+      if (ev.attendeeIds.indexOf(participantId) === -1) ev.attendeeIds.push(participantId);
+    }
+    saveState(); closeModal(); render();
+  },
+  "remove-attendance": function(t){
+    var eventId = t.getAttribute("data-event");
+    var participantId = t.getAttribute("data-participant");
+    var ev = eventById(eventId);
+    if (ev) ev.attendeeIds = (ev.attendeeIds||[]).filter(function(id){ return id !== participantId; });
+    saveState(); render();
+  },
+  "delete-participant": function(t){
+    var id = t.getAttribute("data-id");
+    var p = participantById(id);
+    if (!p) return;
+    if (confirm('Remove "' + p.name + '" from the directory and every session?')){
+      state.participants = state.participants.filter(function(pp){ return pp.id !== id; });
+      state.events.forEach(function(e){ e.attendeeIds = (e.attendeeIds||[]).filter(function(pid){ return pid !== id; }); });
+      saveState(); render();
+    }
+  },
+  "add-field": function(){ openModal(addFieldModalHTML()); },
+  "submit-add-field": function(form){
+    var fd = new FormData(form);
+    var name = (fd.get("fieldName")||"").toString().trim();
+    if (!name) return;
+    var exists = state.customFields.some(function(f){ return f.toLowerCase() === name.toLowerCase(); });
+    if (!exists) state.customFields.push(name);
+    saveState(); closeModal(); render();
+  },
+  "download-template": function(){ downloadTemplate(); },
+  "import-file": function(){
+    var input = document.getElementById("file-import-input");
+    input.value = "";
+    input.click();
+  },
+
+  "budget-tab": function(t){ ui.budgetTab = t.getAttribute("data-tab"); render(); },
+  "budget-detail": function(t){ ui.budgetTab = "detail"; ui.budgetDetailId = t.getAttribute("data-id"); render(); },
+  "add-budget-row": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    if (!ev) return;
+    ev.budgetItems = ev.budgetItems || [];
+    ev.budgetItems.push({ id: uid(), description: "", category: "", type: "Expense", amount: 0 });
+    saveState(); render();
+  },
+  "remove-budget-row": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    if (!ev) return;
+    ev.budgetItems = (ev.budgetItems||[]).filter(function(item){ return item.id !== t.getAttribute("data-item"); });
+    saveState(); render();
+  }
+};
+
+/* ============================================================
+   Global click delegation
+   ============================================================ */
+document.addEventListener("click", function(e){
+  var el = e.target.closest("[data-action]");
+  if (!el) return;
+  var action = el.getAttribute("data-action");
+  if (action === "close-modal-overlay"){ ACTIONS[action](el, e); return; }
+  if (el.tagName === "A") e.preventDefault();
+  if (ACTIONS[action]) ACTIONS[action](el, e);
+});
+
+document.addEventListener("submit", function(e){
+  var form = e.target.closest("form[data-action]");
+  if (!form) return;
+  e.preventDefault();
+  var action = form.getAttribute("data-action");
+  if (ACTIONS[action]) ACTIONS[action](form);
+});
+
+/* Live field edits: participant fields + budget line items */
+document.addEventListener("input", function(e){
+  var t = e.target;
+  if (t.matches("[data-participant][data-field]")){
+    var p = participantById(t.getAttribute("data-participant"));
+    if (p) p[t.getAttribute("data-field")] = t.value;
+    saveState();
+    if (t.getAttribute("data-field") === "name" || t.getAttribute("data-field") === "school"){
+      // no live re-render needed; sidebar/upcoming don't show participant fields
+    }
+  } else if (t.matches("[data-participant][data-customfield]")){
+    var p2 = participantById(t.getAttribute("data-participant"));
+    if (p2){ p2.custom = p2.custom || {}; p2.custom[t.getAttribute("data-customfield")] = t.value; }
+    saveState();
+  } else if (t.matches("[data-budget-field]")){
+    var ev = eventById(t.getAttribute("data-event"));
+    var item = ev ? (ev.budgetItems||[]).find(function(i){ return i.id === t.getAttribute("data-item"); }) : null;
+    if (item){
+      var field = t.getAttribute("data-budget-field");
+      item[field] = field === "amount" ? (parseFloat(t.value) || 0) : t.value;
+      if (field === "amount" || field === "type"){
+        var tt = budgetTotals(ev);
+        var incEl = document.getElementById("bt-income"), expEl = document.getElementById("bt-expense"), netEl = document.getElementById("bt-net");
+        if (incEl) incEl.textContent = fmtMoney(tt.income);
+        if (expEl) expEl.textContent = fmtMoney(tt.expense);
+        if (netEl){ netEl.textContent = fmtMoney(tt.net); netEl.style.color = tt.net >= 0 ? "#0F8A5F" : "#DC2626"; }
+      }
+    }
+    saveState();
+  }
+});
+document.addEventListener("change", function(e){
+  var t = e.target;
+  if (t.matches("[data-budget-field='type']")){
+    // handled by input listener already firing on select change in most browsers; ensure totals update
+  }
+});
+
+/* ============================================================
+   Spreadsheet import
+   ============================================================ */
+var NAME_HEADERS = ["name","fullname","participantname","teachername","attendeename"];
+var SCHOOL_HEADERS = ["school","schoolname","district","organization","institution","site"];
+var EMAIL_HEADERS = ["email","emailaddress"];
+var IEIN_HEADERS = ["iein","ieinnumber","educatorid","illinoiseducatorid"];
+
+function normHeader(h){ return String(h||"").toLowerCase().trim().replace(/[^a-z0-9]/g, ""); }
+function matchCanonical(h){
+  var n = normHeader(h);
+  if (NAME_HEADERS.indexOf(n) !== -1) return "name";
+  if (SCHOOL_HEADERS.indexOf(n) !== -1) return "school";
+  if (EMAIL_HEADERS.indexOf(n) !== -1) return "email";
+  if (IEIN_HEADERS.indexOf(n) !== -1) return "iein";
+  return null;
+}
+
+function parseCSV(text){
+  var rows = [], row = [], field = "", inQuotes = false;
+  for (var i = 0; i < text.length; i++){
+    var c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i+1] === '"'){ field += '"'; i++; } else { inQuotes = false; }
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ","){ row.push(field); field = ""; }
+      else if (c === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c === "\r"){ /* skip */ }
+      else field += c;
+    }
+  }
+  if (field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+  return rows.filter(function(r){ return !(r.length === 1 && r[0].trim() === ""); });
+}
+
+function importRows(headerRow, dataRows, targetSessionId){
+  var mapping = headerRow.map(function(h){ return { header: String(h||"").trim(), canon: matchCanonical(h) }; });
+  mapping.forEach(function(m){
+    if (!m.canon && m.header){
+      var exists = state.customFields.some(function(f){ return f.toLowerCase() === m.header.toLowerCase(); });
+      if (!exists) state.customFields.push(m.header);
+    }
+  });
+  var count = 0;
+  dataRows.forEach(function(r){
+    if (!r || r.every(function(c){ return String(c===undefined?"":c).trim() === ""; })) return;
+    var rec = { name: "", school: "", email: "", iein: "", custom: {} };
+    mapping.forEach(function(m, idx){
+      var val = r[idx] !== undefined ? String(r[idx]).trim() : "";
+      if (m.canon) rec[m.canon] = val;
+      else if (m.header) rec.custom[m.header] = val;
+    });
+    if (!rec.name && !rec.email) return;
+    var existing = null;
+    if (rec.email) existing = state.participants.find(function(p){ return p.email && p.email.toLowerCase() === rec.email.toLowerCase(); });
+    if (!existing && rec.name) existing = state.participants.find(function(p){ return p.name.toLowerCase() === rec.name.toLowerCase() && (p.school||"").toLowerCase() === (rec.school||"").toLowerCase(); });
+    var target;
+    if (existing){
+      if (rec.name) existing.name = rec.name;
+      if (rec.school) existing.school = rec.school;
+      if (rec.email) existing.email = rec.email;
+      if (rec.iein) existing.iein = rec.iein;
+      existing.custom = existing.custom || {};
+      Object.keys(rec.custom).forEach(function(k){ if (rec.custom[k]) existing.custom[k] = rec.custom[k]; });
+      target = existing;
+    } else {
+      target = { id: uid(), name: rec.name || "(Unnamed)", school: rec.school, email: rec.email, iein: rec.iein, custom: rec.custom };
+      state.participants.push(target);
+    }
+    if (targetSessionId){
+      var ev = eventById(targetSessionId);
+      if (ev){ ev.attendeeIds = ev.attendeeIds || []; if (ev.attendeeIds.indexOf(target.id) === -1) ev.attendeeIds.push(target.id); }
+    }
+    count++;
+  });
+  saveState(); render();
+  alert("Imported " + count + " participant" + (count === 1 ? "" : "s") + ".");
+}
+
+function handleImportFile(file){
+  var targetSessionId = (ui.attendanceSession && ui.attendanceSession !== "directory") ? ui.attendanceSession : null;
+  var ext = file.name.split(".").pop().toLowerCase();
+  if (ext === "csv"){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var rows = parseCSV(e.target.result);
+      if (!rows.length) return;
+      importRows(rows[0], rows.slice(1), targetSessionId);
+    };
+    reader.readAsText(file);
+  } else if (ext === "xlsx" || ext === "xls"){
+    if (typeof XLSX === "undefined"){
+      alert("The spreadsheet reader could not load (no internet connection?). Please use a CSV file instead.");
+      return;
+    }
+    var reader2 = new FileReader();
+    reader2.onload = function(e){
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, { type: "array" });
+      var sheet = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      if (!rows.length) return;
+      importRows(rows[0], rows.slice(1), targetSessionId);
+    };
+    reader2.readAsArrayBuffer(file);
+  } else {
+    alert("Unsupported file type. Please upload a .csv, .xlsx, or .xls file.");
+  }
+}
+document.getElementById("file-import-input").addEventListener("change", function(e){
+  var file = e.target.files && e.target.files[0];
+  if (file) handleImportFile(file);
+});
+
+function csvEscape(v){
+  v = String(v === undefined || v === null ? "" : v);
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function downloadTemplate(){
+  var headers = ["Name","School","Email","IEIN"].concat(state.customFields);
+  var csv = headers.map(csvEscape).join(",") + "\n";
+  var blob = new Blob([csv], { type: "text/csv" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = "participant_template.csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ============================================================
+   Init
+   ============================================================ */
+render();
+
+})();
+</script>
+</body>
+</html>
