@@ -1192,6 +1192,7 @@ var ACTIONS = {
     } else {
       state.events.push({ id: uid(), title: title, date: date, boardId: boardId, notes: notes, attendeeIds: [], budgetItems: [] });
     }
+    state.calendarCursor = date.slice(0, 7);
     saveState(); closeModal(); render();
   },
   "delete-event": function(t){
