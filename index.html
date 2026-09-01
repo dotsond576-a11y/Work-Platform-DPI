@@ -253,7 +253,7 @@ label{font-size:12.5px;font-weight:600;color:var(--text-muted);display:block;mar
   padding:11px 14px;margin-bottom:7px;cursor:pointer;
 }
 .list-row:hover{border-color:var(--blue-600);box-shadow:var(--shadow);}
-.list-date{font-family:var(--font-mono);font-weight:700;font-size:12.5px;color:var(--blue-800);width:64px;flex-shrink:0;}
+.list-date{font-family:var(--font-mono);font-weight:700;font-size:12.5px;color:var(--blue-800);width:auto;min-width:64px;flex-shrink:0;}
 .list-title{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .list-board{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-shrink:0;}
 
@@ -454,6 +454,21 @@ function fmtDateLong(iso){
   var d = parseISO(iso);
   return MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
 }
+function eventEndDate(e){ return (e.endDate && e.endDate > e.date) ? e.endDate : e.date; }
+function isMultiDay(e){ return eventEndDate(e) !== e.date; }
+function eventDateRangeLabel(e){
+  if (!isMultiDay(e)) return fmtDateLong(e.date);
+  var d1 = parseISO(e.date), d2 = parseISO(eventEndDate(e));
+  if (d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth()){
+    return MONTH_NAMES[d1.getMonth()] + " " + d1.getDate() + "–" + d2.getDate() + ", " + d1.getFullYear();
+  }
+  return fmtDateLong(e.date) + " – " + fmtDateLong(eventEndDate(e));
+}
+function eventDateShortLabel(e){
+  if (!isMultiDay(e)) return MONTH_SHORT[parseISO(e.date).getMonth()].toUpperCase() + " " + pad(parseISO(e.date).getDate());
+  var d1 = parseISO(e.date), d2 = parseISO(eventEndDate(e));
+  return MONTH_SHORT[d1.getMonth()].toUpperCase() + " " + pad(d1.getDate()) + "–" + MONTH_SHORT[d2.getMonth()].toUpperCase() + " " + pad(d2.getDate());
+}
 function fmtMoney(n){
   n = Number(n) || 0;
   var sign = n < 0 ? "-" : "";
@@ -563,7 +578,7 @@ function renderSidebar(){
 function renderUpcoming(){
   var el = document.getElementById("upcoming-panel");
   var today = todayISO();
-  var upcoming = sortedEvents().filter(function(e){ return e.date >= today; }).slice(0, 8);
+  var upcoming = sortedEvents().filter(function(e){ return eventEndDate(e) >= today; }).slice(0, 8);
   var html = '<div class="section-label">Upcoming</div>';
   if (!upcoming.length){
     html += '<div class="empty-note">No upcoming dates.</div>';
@@ -603,10 +618,21 @@ function calendarViewHTML(){
   var firstOfMonth = new Date(year, month, 1);
   var startOffset = firstOfMonth.getDay();
   var gridStart = new Date(year, month, 1 - startOffset);
+  var gridStartISO = toISO(gridStart);
+  var gridEndISO = toISO(new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 41));
   var today = todayISO();
   var evByDate = {};
   visibleEvents().forEach(function(e){
-    (evByDate[e.date] = evByDate[e.date] || []).push(e);
+    var rangeStart = e.date > gridStartISO ? e.date : gridStartISO;
+    var rangeEnd = eventEndDate(e) < gridEndISO ? eventEndDate(e) : gridEndISO;
+    if (rangeStart > rangeEnd) return;
+    var cursor = parseISO(rangeStart);
+    var endCursor = parseISO(rangeEnd);
+    while (cursor <= endCursor){
+      var iso = toISO(cursor);
+      (evByDate[iso] = evByDate[iso] || []).push(e);
+      cursor.setDate(cursor.getDate() + 1);
+    }
   });
 
   var html = '<div class="toolbar">' +
@@ -660,7 +686,7 @@ function listViewHTML(){
       lastMonth = monthKey;
     }
     html += '<div class="list-row" data-action="edit-event" data-id="' + e.id + '">' +
-              '<div class="list-date">' + MONTH_SHORT[d.getMonth()].toUpperCase() + ' ' + pad(d.getDate()) + '</div>' +
+              '<div class="list-date">' + eventDateShortLabel(e) + '</div>' +
               '<div class="list-title">' + esc(e.title) + '</div>' +
               '<div class="list-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
             '</div>';
@@ -702,7 +728,7 @@ function kanbanColumnHTML(boardId, name, color, events){
   events.forEach(function(e){
     html += '<div class="kanban-card" draggable="true" data-event-id="' + e.id + '" style="border-left-color:' + color + '" data-action="edit-event" data-id="' + e.id + '">' +
               '<div class="kanban-card-title">' + esc(e.title) + '</div>' +
-              '<div class="kanban-card-date">' + fmtDateLong(e.date) + '</div>' +
+              '<div class="kanban-card-date">' + eventDateRangeLabel(e) + '</div>' +
             '</div>';
   });
   html += '<button class="kanban-add" data-action="add-event" data-date="" data-board="' + boardId + '">+ Add card</button>';
@@ -843,9 +869,8 @@ function participantDetailModalHTML(participantId){
   } else {
     html += '<div style="max-height:340px;overflow-y:auto;">';
     attended.forEach(function(e){
-      var d = parseISO(e.date);
       html += '<div class="list-row" style="margin-bottom:6px;cursor:pointer;" data-action="goto-session" data-id="' + e.id + '">' +
-                '<div class="list-date">' + MONTH_SHORT[d.getMonth()].toUpperCase() + ' ' + pad(d.getDate()) + '</div>' +
+                '<div class="list-date">' + eventDateShortLabel(e) + '</div>' +
                 '<div class="list-title">' + esc(e.title) + '</div>' +
                 '<div class="list-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
               '</div>';
@@ -873,7 +898,7 @@ function participantCells(p){
 function sessionRosterHTML(session){
   var attendees = (session.attendeeIds || []).map(participantById).filter(Boolean);
   var html = '<div class="toolbar" style="margin-bottom:14px;">' +
-    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(session.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + fmtDateLong(session.date) + '</span></h3>' +
+    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(session.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + eventDateRangeLabel(session) + '</span></h3>' +
     '<div class="grow"></div>' +
     '<button class="btn btn-sm" data-action="add-existing-attendee" data-id="' + session.id + '">+ Add existing</button>' +
     '<button class="btn btn-sm btn-primary" data-action="add-new-attendee" data-id="' + session.id + '">+ Add attendee</button>' +
@@ -925,7 +950,7 @@ function budgetOverviewHTML(){
     grandIncome += t.income; grandExpense += t.expense;
     html += '<tr>' +
       '<td><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
-      '<td style="font-family:var(--font-mono);">' + fmtDateLong(e.date) + '</td>' +
+      '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
       '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
       '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
       '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
@@ -942,7 +967,7 @@ function budgetDetailHTML(ev){
   var t = budgetTotals(ev);
   var html = '<div class="toolbar" style="margin-bottom:14px;">' +
     '<button class="btn btn-sm" data-action="budget-tab" data-tab="overview">&larr; Overview</button>' +
-    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(ev.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + fmtDateLong(ev.date) + '</span></h3>' +
+    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(ev.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + eventDateRangeLabel(ev) + '</span></h3>' +
     '<div class="grow"></div>' +
     '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
   '</div>';
@@ -1096,9 +1121,10 @@ function eventModalHTML(eventId, prefillDate, prefillBoard){
     '<div class="modal-body">' +
       '<div class="field"><label>Title</label><input type="text" name="title" required value="' + attr(ev?ev.title:"") + '" placeholder="e.g. CS Educator Workshop 5"></div>' +
       '<div class="field-row">' +
-        '<div class="field"><label>Date</label><input type="date" name="date" required value="' + (ev?ev.date:(prefillDate||todayISO())) + '"></div>' +
-        '<div class="field"><label>Board</label><select name="boardId">' + boardOptions + '</select></div>' +
+        '<div class="field"><label>Start date</label><input type="date" name="date" required value="' + (ev?ev.date:(prefillDate||todayISO())) + '"></div>' +
+        '<div class="field"><label>End date <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label><input type="date" name="endDate" value="' + (ev && isMultiDay(ev) ? ev.endDate : "") + '"></div>' +
       '</div>' +
+      '<div class="field"><label>Board</label><select name="boardId">' + boardOptions + '</select></div>' +
       '<div class="field"><label>Notes</label><textarea name="notes" rows="3" placeholder="Optional details">' + esc(ev?ev.notes:"") + '</textarea></div>' +
     '</div>' +
     '<div class="modal-footer">' +
@@ -1264,14 +1290,16 @@ var ACTIONS = {
     var id = form.getAttribute("data-id");
     var title = (fd.get("title")||"").toString().trim();
     var date = (fd.get("date")||"").toString();
+    var endDateRaw = (fd.get("endDate")||"").toString();
+    var endDate = (endDateRaw && endDateRaw > date) ? endDateRaw : null;
     var boardId = (fd.get("boardId")||"").toString() || null;
     var notes = (fd.get("notes")||"").toString();
     if (!title || !date) return;
     if (id){
       var e = eventById(id);
-      e.title = title; e.date = date; e.boardId = boardId; e.notes = notes;
+      e.title = title; e.date = date; e.endDate = endDate; e.boardId = boardId; e.notes = notes;
     } else {
-      state.events.push({ id: uid(), title: title, date: date, boardId: boardId, notes: notes, attendeeIds: [], budgetItems: [] });
+      state.events.push({ id: uid(), title: title, date: date, endDate: endDate, boardId: boardId, notes: notes, attendeeIds: [], budgetItems: [] });
     }
     state.calendarCursor = date.slice(0, 7);
     saveState(); closeModal(); render();
