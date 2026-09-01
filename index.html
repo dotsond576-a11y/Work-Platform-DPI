@@ -1399,13 +1399,31 @@ var ACTIONS = {
 /* ============================================================
    Global click delegation
    ============================================================ */
+function runAction(action, arg1, arg2){
+  if (!ACTIONS[action]) return;
+  try{
+    ACTIONS[action](arg1, arg2);
+  }catch(err){
+    console.error("Action \"" + action + "\" failed:", err);
+    document.getElementById("modal-root").innerHTML =
+      '<div class="modal-overlay" data-action="close-modal-overlay">' +
+        '<div class="modal" data-stop="1">' +
+          '<div class="modal-header"><h3>Something went wrong</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+          '<div class="modal-body"><p style="margin:0 0 10px;color:var(--text);line-height:1.5;">This action hit an unexpected error and did not complete:</p>' +
+          '<pre style="white-space:pre-wrap;background:#F8FAFC;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;color:#DC2626;">' + esc(err && err.message ? err.message : String(err)) + '</pre></div>' +
+          '<div class="modal-footer"><button type="button" class="btn btn-primary" data-action="close-modal">OK</button></div>' +
+        '</div>' +
+      '</div>';
+  }
+}
+
 document.addEventListener("click", function(e){
   var el = e.target.closest("[data-action]");
   if (!el) return;
   var action = el.getAttribute("data-action");
-  if (action === "close-modal-overlay"){ ACTIONS[action](el, e); return; }
+  if (action === "close-modal-overlay"){ runAction(action, el, e); return; }
   if (el.tagName === "A") e.preventDefault();
-  if (ACTIONS[action]) ACTIONS[action](el, e);
+  runAction(action, el, e);
 });
 
 document.addEventListener("submit", function(e){
@@ -1413,7 +1431,7 @@ document.addEventListener("submit", function(e){
   if (!form) return;
   e.preventDefault();
   var action = form.getAttribute("data-action");
-  if (ACTIONS[action]) ACTIONS[action](form);
+  runAction(action, form);
 });
 
 /* Live field edits: participant fields + budget line items */
@@ -1589,7 +1607,24 @@ function downloadTemplate(){
 /* ============================================================
    Init
    ============================================================ */
+function storageAvailable(){
+  try{
+    var testKey = "__dpi_storage_test__";
+    localStorage.setItem(testKey, "1");
+    localStorage.removeItem(testKey);
+    return true;
+  }catch(err){
+    return false;
+  }
+}
+
 render();
+if (!storageAvailable()){
+  alertModal(
+    "This browser tab or preview is blocking local storage, so anything you add or edit will be lost as soon as you reload or close this page. Try opening this file directly in a normal browser tab (not an embedded preview, iframe, or private/incognito window) to fix this.",
+    "Changes won't be saved here"
+  );
+}
 
 })();
 </script>
