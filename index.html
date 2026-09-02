@@ -804,8 +804,10 @@ function emptyState(title, sub){
 /* ============================================================
    Attendance view
    ============================================================ */
+var ATTENDANCE_BOARD_IDS = ["board-cs-educator", "board-ai-ambass", "board-summer"];
+
 function attendanceViewHTML(){
-  var sessions = sortedEvents();
+  var sessions = sortedEvents().filter(function(e){ return ATTENDANCE_BOARD_IDS.indexOf(e.boardId) !== -1; });
   var html = '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
     '<button class="btn" data-action="add-field">+ Add info field</button>' +
     '<button class="btn" data-action="download-template">Download template</button>' +
@@ -827,7 +829,7 @@ function attendanceViewHTML(){
     html += directoryTableHTML();
   } else {
     var session = eventById(ui.attendanceSession);
-    if (!session){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
+    if (!session || ATTENDANCE_BOARD_IDS.indexOf(session.boardId) === -1){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
     else html += sessionRosterHTML(session);
   }
   html += '</div>';
