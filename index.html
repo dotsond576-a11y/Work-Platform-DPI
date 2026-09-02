@@ -377,7 +377,8 @@ function defaultState(){
     customFields: [],
     boardFilter: null,
     currentView: "calendar",
-    calendarCursor: "2026-08"
+    calendarCursor: "2026-08",
+    resourceLinks: []
   };
 }
 
@@ -552,7 +553,7 @@ function render(){
 
 function renderHeader(){
   var el = document.getElementById("app-header");
-  var views = [["calendar","Calendar"],["list","List"],["board","Board"],["attendance","Attendance"],["budget","Budget"]];
+  var views = [["calendar","Calendar"],["list","List"],["board","Board"],["attendance","Attendance"],["budget","Budget"],["resources","Resources"]];
   el.innerHTML =
     '<div class="brand">' +
       '<div class="brand-mark">DPI</div>' +
@@ -633,6 +634,7 @@ function renderMain(){
   else if (state.currentView === "board") el.innerHTML = boardViewHTML();
   else if (state.currentView === "attendance") el.innerHTML = attendanceViewHTML();
   else if (state.currentView === "budget") el.innerHTML = budgetViewHTML();
+  else if (state.currentView === "resources") el.innerHTML = resourcesViewHTML();
   if (state.currentView === "board") wireBoardDnD();
   if (state.currentView === "attendance") wireDirectorySearch();
 }
@@ -1113,6 +1115,61 @@ function donutChartSVG(events){
 }
 
 /* ============================================================
+   Resources view
+   ============================================================ */
+function sortedResourceLinks(){
+  return state.resourceLinks.slice().sort(function(a, b){ return (a.title||"").toLowerCase().localeCompare((b.title||"").toLowerCase()); });
+}
+
+function resourcesViewHTML(){
+  var html = '<div class="toolbar"><h2 class="page-title">Resources</h2><div class="grow"></div>' +
+    '<button class="btn btn-primary" data-action="add-link">+ Add link</button>' +
+  '</div>';
+  var links = sortedResourceLinks();
+  if (!links.length){
+    html += emptyState("No links yet.", "Add links to meeting agendas, budget documents, or anything else your team needs handy.");
+    return html;
+  }
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Notes</th><th></th></tr></thead><tbody>';
+  links.forEach(function(l){
+    html += '<tr>' +
+      '<td><a href="' + attr(normalizeUrl(l.url)) + '" target="_blank" rel="noopener noreferrer" style="font-weight:600;color:var(--blue-800);">' + esc(l.title) + '</a></td>' +
+      '<td style="color:var(--text-muted);">' + esc(l.notes||"") + '</td>' +
+      '<td style="white-space:nowrap;">' +
+        '<button class="row-action" style="color:var(--blue-800);" data-action="edit-link" data-id="' + l.id + '" title="Edit">&#9998;</button>' +
+        '<button class="row-action" data-action="delete-link" data-id="' + l.id + '" title="Delete">&times;</button>' +
+      '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function normalizeUrl(u){
+  u = (u || "").trim();
+  if (!u) return "#";
+  return /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : "https://" + u;
+}
+
+function linkModalHTML(linkId){
+  var link = linkId ? state.resourceLinks.find(function(l){ return l.id === linkId; }) : null;
+  var isNew = !link;
+  return '<form id="link-form" data-action="submit-link-form" data-id="' + (link?link.id:"") + '">' +
+    '<div class="modal-header"><h3>' + (isNew?"Add link":"Edit link") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Title</label><input type="text" name="title" required value="' + attr(link?link.title:"") + '" placeholder="e.g. October Budget Meeting Agenda"></div>' +
+      '<div class="field"><label>URL</label><input type="text" name="url" required value="' + attr(link?link.url:"") + '" placeholder="https://..."></div>' +
+      '<div class="field"><label>Notes <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label><input type="text" name="notes" value="' + attr(link?link.notes:"") + '" placeholder="e.g. Teacher training meeting, Sept 2026"></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      (link ? '<button type="button" class="btn btn-danger push-left" data-action="delete-link" data-id="' + link.id + '">Delete</button>' : '') +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">' + (isNew?"Add link":"Save changes") + '</button>' +
+    '</div>' +
+  '</form>';
+}
+
+/* ============================================================
    Modal system
    ============================================================ */
 function openModal(html, wide){
@@ -1277,6 +1334,32 @@ var ACTIONS = {
   },
   "add-board": function(){ openModal(boardModalHTML(null)); },
   "edit-board": function(t){ openModal(boardModalHTML(t.getAttribute("data-id"))); },
+  "add-link": function(){ openModal(linkModalHTML(null)); },
+  "edit-link": function(t){ openModal(linkModalHTML(t.getAttribute("data-id"))); },
+  "submit-link-form": function(form){
+    var fd = new FormData(form);
+    var id = form.getAttribute("data-id");
+    var title = (fd.get("title")||"").toString().trim();
+    var url = (fd.get("url")||"").toString().trim();
+    var notes = (fd.get("notes")||"").toString().trim();
+    if (!title || !url) return;
+    if (id){
+      var l = state.resourceLinks.find(function(x){ return x.id === id; });
+      if (l){ l.title = title; l.url = url; l.notes = notes; }
+    } else {
+      state.resourceLinks.push({ id: uid(), title: title, url: url, notes: notes });
+    }
+    saveState(); closeModal(); render();
+  },
+  "delete-link": function(t){
+    var id = t.getAttribute("data-id");
+    var l = state.resourceLinks.find(function(x){ return x.id === id; });
+    if (!l) return;
+    confirmModal('Delete "' + l.title + '"?', function(){
+      state.resourceLinks = state.resourceLinks.filter(function(x){ return x.id !== id; });
+      saveState(); render();
+    }, { title: "Delete link?" });
+  },
   "delete-board": function(t){
     var id = t.getAttribute("data-id");
     var b = boardById(id);
