@@ -349,6 +349,8 @@ table.data-table tfoot td{font-weight:700;font-family:var(--font-mono);backgroun
    ============================================================ */
 var STORAGE_KEY = "dpiTeacherCalendarState_v1";
 
+var HOLIDAYS_BOARD_ID = "board-holidays";
+
 var DEFAULT_BOARDS = [
   { id: "board-cs-educator",  name: "CS Educator Workshop Series", color: "#13294B" },
   { id: "board-newsletters",  name: "Newsletters",                 color: "#E84A27" },
@@ -368,8 +370,39 @@ function defaultEvents(){
   ];
 }
 
+function defaultHolidayEvents(){
+  return [
+    { id: "evt-holiday-labor-day",    title: "Labor Day",                   date: "2026-09-07", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-indigenous",   title: "Indigenous Peoples' Day",     date: "2026-10-12", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-veterans",     title: "Veterans Day",                date: "2026-11-11", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-thanksgiving", title: "Thanksgiving",                date: "2026-11-26", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-christmas",    title: "Christmas",                   date: "2026-12-25", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-new-year",     title: "New Year's Day",              date: "2027-01-01", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-mlk",          title: "Martin Luther King Jr. Day",  date: "2027-01-18", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-presidents",   title: "Presidents' Day",             date: "2027-02-15", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-memorial",     title: "Memorial Day",                date: "2027-05-31", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-juneteenth",   title: "Juneteenth",                  date: "2027-06-19", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-independence", title: "Independence Day",            date: "2027-07-04", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] }
+  ];
+}
+
+function seedHolidaysIfNeeded(s){
+  if (s.holidaysSeeded) return s;
+  var hasHolidaysBoard = s.boards.some(function(b){ return b.id === HOLIDAYS_BOARD_ID; });
+  if (!hasHolidaysBoard){
+    s.boards.push({ id: HOLIDAYS_BOARD_ID, name: "Holidays", color: "#64748B" });
+  }
+  var existingIds = {};
+  s.events.forEach(function(e){ existingIds[e.id] = true; });
+  defaultHolidayEvents().forEach(function(e){
+    if (!existingIds[e.id]) s.events.push(e);
+  });
+  s.holidaysSeeded = true;
+  return s;
+}
+
 function defaultState(){
-  return {
+  var s = {
     title: "DPI Teacher Training Calendar",
     boards: JSON.parse(JSON.stringify(DEFAULT_BOARDS)),
     events: defaultEvents(),
@@ -378,8 +411,10 @@ function defaultState(){
     boardFilter: null,
     currentView: "calendar",
     calendarCursor: "2026-08",
-    resourceLinks: []
+    resourceLinks: [],
+    holidaysSeeded: false
   };
+  return seedHolidaysIfNeeded(s);
 }
 
 var CATEGORY_PALETTE = ["#13294B","#E84A27","#2E5A88","#F1793F","#6B8CB8","#F5A671","#0F8A5F","#8B5CF6","#C43D1F","#94A3B8"];
@@ -425,6 +460,10 @@ function loadState(){
   }
   var s = ensureDefaults(loaded);
   s.participants.forEach(migrateParticipant);
+  if (loaded && loaded.holidaysSeeded === undefined){
+    s.holidaysSeeded = false;
+  }
+  seedHolidaysIfNeeded(s);
   return s;
 }
 
