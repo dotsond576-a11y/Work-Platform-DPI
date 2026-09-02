@@ -501,6 +501,13 @@ function boardName(id){ var b = boardById(id); return b ? b.name : "Uncategorize
 function eventById(id){ return state.events.find(function(e){ return e.id === id; }); }
 function participantById(id){ return state.participants.find(function(p){ return p.id === id; }); }
 function fullName(p){ return ((p.firstName||"") + " " + (p.lastName||"")).trim() || "(Unnamed)"; }
+function sortedParticipants(list){
+  return list.slice().sort(function(a, b){
+    var an = ((a.lastName||"") + " " + (a.firstName||"")).trim().toLowerCase();
+    var bn = ((b.lastName||"") + " " + (b.firstName||"")).trim().toLowerCase();
+    return an.localeCompare(bn);
+  });
+}
 function sortedEvents(){ return state.events.slice().sort(function(a,b){ return (a.date || "").localeCompare(b.date || ""); }); }
 function visibleEvents(){
   var list = sortedEvents();
@@ -844,7 +851,7 @@ function directoryTableHTML(){
   html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
     tableHeaderCells() + '<th>Sessions</th><th></th>' +
     '</tr></thead><tbody>';
-  state.participants.forEach(function(p){
+  sortedParticipants(state.participants).forEach(function(p){
     var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
     var searchKey = (fullName(p) + " " + (p.school||"") + " " + (p.email||"")).toLowerCase();
     html += '<tr data-search="' + attr(searchKey) + '">' + participantCells(p) +
@@ -922,7 +929,7 @@ function participantCells(p){
 }
 
 function sessionRosterHTML(session){
-  var attendees = (session.attendeeIds || []).map(participantById).filter(Boolean);
+  var attendees = sortedParticipants((session.attendeeIds || []).map(participantById).filter(Boolean));
   var html = '<div class="toolbar" style="margin-bottom:14px;">' +
     '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(session.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + eventDateRangeLabel(session) + '</span></h3>' +
     '<div class="grow"></div>' +
@@ -1209,7 +1216,7 @@ function attendeeModalHTML(sessionId){
 function existingAttendeeModalHTML(sessionId){
   var session = eventById(sessionId);
   var already = session ? (session.attendeeIds||[]) : [];
-  var candidates = state.participants.filter(function(p){ return already.indexOf(p.id) === -1; });
+  var candidates = sortedParticipants(state.participants.filter(function(p){ return already.indexOf(p.id) === -1; }));
   var html = '<div class="modal-header"><h3>Add existing participant</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">';
   if (!candidates.length){
@@ -1652,7 +1659,7 @@ function downloadTemplate(){
 function exportParticipantsCSV(){
   var headers = ["First Name","Last Name","School","Email","IEIN"].concat(state.customFields).concat(["Total Sessions"]);
   var rows = [headers];
-  state.participants.forEach(function(p){
+  sortedParticipants(state.participants).forEach(function(p){
     var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
     var row = [p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
     state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
