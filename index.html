@@ -1122,12 +1122,12 @@ function eventModalHTML(eventId, prefillDate, prefillBoard){
   return '<form id="event-form" data-action="submit-event-form" data-id="' + (ev?ev.id:"") + '">' +
     '<div class="modal-header"><h3>' + (isNew?"New event":"Edit event") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
+      '<div class="field"><label>Board</label><select name="boardId">' + boardOptions + '</select></div>' +
       '<div class="field"><label>Title</label><input type="text" name="title" required value="' + attr(ev?ev.title:"") + '" placeholder="e.g. CS Educator Workshop 5"></div>' +
       '<div class="field-row">' +
         '<div class="field"><label>Start date</label><input type="date" name="date" required value="' + (ev?ev.date:(prefillDate||todayISO())) + '"></div>' +
         '<div class="field"><label>End date <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label><input type="date" name="endDate" value="' + (ev && isMultiDay(ev) ? ev.endDate : "") + '"></div>' +
       '</div>' +
-      '<div class="field"><label>Board</label><select name="boardId">' + boardOptions + '</select></div>' +
       '<div class="field"><label>Notes</label><textarea name="notes" rows="3" placeholder="Optional details">' + esc(ev?ev.notes:"") + '</textarea></div>' +
     '</div>' +
     '<div class="modal-footer">' +
