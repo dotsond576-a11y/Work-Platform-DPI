@@ -285,6 +285,8 @@ table.data-table th{
   background:var(--blue-800);color:#fff;text-align:left;padding:10px 12px;font-weight:600;font-size:12px;
   white-space:nowrap;position:sticky;top:0;
 }
+.th-remove{border:none;background:none;color:rgba(255,255,255,0.55);font-size:13px;padding:0 0 0 4px;line-height:1;vertical-align:middle;}
+.th-remove:hover{color:#fff;}
 table.data-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
 table.data-table tbody tr:hover{background:#FAFBFF;}
 table.data-table input, table.data-table select{border:1px solid transparent;background:transparent;padding:6px 7px;border-radius:6px;width:100%;min-width:90px;}
@@ -880,7 +882,9 @@ function attendanceViewHTML(){
 
 function tableHeaderCells(){
   var cells = '<th>First Name</th><th>Last Name</th><th>School</th><th>Email</th><th>IEIN</th>';
-  state.customFields.forEach(function(f){ cells += '<th>' + esc(f) + '</th>'; });
+  state.customFields.forEach(function(f){
+    cells += '<th>' + esc(f) + ' <button type="button" class="th-remove" data-action="delete-field" data-field="' + attr(f) + '" title="Remove this field">&times;</button></th>';
+  });
   return cells;
 }
 
@@ -1532,6 +1536,14 @@ var ACTIONS = {
     var exists = state.customFields.some(function(f){ return f.toLowerCase() === name.toLowerCase(); });
     if (!exists) state.customFields.push(name);
     saveState(); closeModal(); render();
+  },
+  "delete-field": function(t){
+    var field = t.getAttribute("data-field");
+    confirmModal('Remove the "' + field + '" field from every participant? This can\'t be undone.', function(){
+      state.customFields = state.customFields.filter(function(f){ return f !== field; });
+      state.participants.forEach(function(p){ if (p.custom) delete p.custom[field]; });
+      saveState(); render();
+    }, { title: "Remove field?" });
   },
   "download-template": function(){ downloadTemplate(); },
   "export-participants": function(){ exportParticipantsCSV(); },
