@@ -855,6 +855,7 @@ function attendanceViewHTML(){
     '<button class="btn" data-action="add-field">+ Add info field</button>' +
     '<button class="btn" data-action="download-template">Download template</button>' +
     (ui.attendanceSession === "directory" ? '<button class="btn" data-action="export-participants">Export participants</button>' : '') +
+    '<button class="btn" data-action="export-all-attendance">Download all attendance</button>' +
     '<button class="btn btn-secondary" data-action="import-file">Import spreadsheet</button>' +
     (ui.attendanceSession === "directory" ? '<button class="btn btn-primary" data-action="add-participant">+ Add participant</button>' : '') +
   '</div>';
@@ -980,6 +981,7 @@ function sessionRosterHTML(session){
   var html = '<div class="toolbar" style="margin-bottom:14px;">' +
     '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(session.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + eventDateRangeLabel(session) + '</span></h3>' +
     '<div class="grow"></div>' +
+    '<button class="btn btn-sm" data-action="export-session-attendance" data-id="' + session.id + '">Download attendance</button>' +
     '<button class="btn btn-sm" data-action="add-existing-attendee" data-id="' + session.id + '">+ Add existing</button>' +
     '<button class="btn btn-sm btn-primary" data-action="add-new-attendee" data-id="' + session.id + '">+ Add attendee</button>' +
   '</div>';
@@ -1547,6 +1549,11 @@ var ACTIONS = {
   },
   "download-template": function(){ downloadTemplate(); },
   "export-participants": function(){ exportParticipantsCSV(); },
+  "export-session-attendance": function(t){
+    var session = eventById(t.getAttribute("data-id"));
+    if (session) exportSessionAttendanceCSV(session);
+  },
+  "export-all-attendance": function(){ exportAllAttendanceCSV(); },
   "import-file": function(){
     var input = document.getElementById("file-import-input");
     input.value = "";
@@ -1809,6 +1816,45 @@ function exportParticipantsCSV(){
   a.href = url; a.download = "participants_export.csv";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function downloadCSVRows(rows, filename){
+  var csv = rows.map(function(r){ return r.map(csvEscape).join(","); }).join("\n");
+  var blob = new Blob([csv], { type: "text/csv" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function slugify(s){
+  return String(s||"").trim().replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase() || "session";
+}
+
+function sessionAttendanceRows(session){
+  var attendees = sortedParticipants((session.attendeeIds || []).map(participantById).filter(Boolean));
+  return attendees.map(function(p){
+    var row = [session.title, eventDateRangeLabel(session), p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
+    state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
+    return row;
+  });
+}
+
+function exportSessionAttendanceCSV(session){
+  var headers = ["Session","Date","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
+  var rows = [headers].concat(sessionAttendanceRows(session));
+  downloadCSVRows(rows, "attendance_" + slugify(session.title) + ".csv");
+}
+
+function exportAllAttendanceCSV(){
+  var headers = ["Session","Date","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
+  var sessions = sortedEvents().filter(function(e){ return ATTENDANCE_BOARD_IDS.indexOf(e.boardId) !== -1; });
+  var rows = [headers];
+  sessions.forEach(function(session){
+    rows = rows.concat(sessionAttendanceRows(session));
+  });
+  downloadCSVRows(rows, "attendance_all_sessions.csv");
 }
 
 /* ============================================================
