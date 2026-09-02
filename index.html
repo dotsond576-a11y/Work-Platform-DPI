@@ -395,6 +395,24 @@ function ensureDefaults(loaded){
   return merged;
 }
 
+function migrateParticipant(p){
+  if (p.firstName === undefined && p.lastName === undefined){
+    var full = (p.name || "").trim();
+    var parts = full.split(/\s+/).filter(Boolean);
+    if (parts.length > 1){
+      p.lastName = parts.pop();
+      p.firstName = parts.join(" ");
+    } else {
+      p.firstName = full;
+      p.lastName = "";
+    }
+  }
+  if (p.firstName === undefined) p.firstName = "";
+  if (p.lastName === undefined) p.lastName = "";
+  delete p.name;
+  return p;
+}
+
 function loadState(){
   var loaded = null;
   try{
@@ -404,7 +422,9 @@ function loadState(){
     console.error("Could not read saved data, falling back to defaults.", err);
     loaded = null;
   }
-  return ensureDefaults(loaded);
+  var s = ensureDefaults(loaded);
+  s.participants.forEach(migrateParticipant);
+  return s;
 }
 
 var saveTimer = null;
@@ -480,6 +500,7 @@ function boardColor(id){ var b = boardById(id); return b ? b.color : "#94A3B8"; 
 function boardName(id){ var b = boardById(id); return b ? b.name : "Uncategorized"; }
 function eventById(id){ return state.events.find(function(e){ return e.id === id; }); }
 function participantById(id){ return state.participants.find(function(p){ return p.id === id; }); }
+function fullName(p){ return ((p.firstName||"") + " " + (p.lastName||"")).trim() || "(Unnamed)"; }
 function sortedEvents(){ return state.events.slice().sort(function(a,b){ return (a.date || "").localeCompare(b.date || ""); }); }
 function visibleEvents(){
   var list = sortedEvents();
@@ -781,6 +802,7 @@ function attendanceViewHTML(){
   var html = '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
     '<button class="btn" data-action="add-field">+ Add info field</button>' +
     '<button class="btn" data-action="download-template">Download template</button>' +
+    (ui.attendanceSession === "directory" ? '<button class="btn" data-action="export-participants">Export participants</button>' : '') +
     '<button class="btn btn-secondary" data-action="import-file">Import spreadsheet</button>' +
     (ui.attendanceSession === "directory" ? '<button class="btn btn-primary" data-action="add-participant">+ Add participant</button>' : '') +
   '</div>';
@@ -807,7 +829,7 @@ function attendanceViewHTML(){
 }
 
 function tableHeaderCells(){
-  var cells = '<th>Name</th><th>School</th><th>Email</th><th>IEIN</th>';
+  var cells = '<th>First Name</th><th>Last Name</th><th>School</th><th>Email</th><th>IEIN</th>';
   state.customFields.forEach(function(f){ cells += '<th>' + esc(f) + '</th>'; });
   return cells;
 }
@@ -824,7 +846,7 @@ function directoryTableHTML(){
     '</tr></thead><tbody>';
   state.participants.forEach(function(p){
     var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
-    var searchKey = (p.name + " " + (p.school||"") + " " + (p.email||"")).toLowerCase();
+    var searchKey = (fullName(p) + " " + (p.school||"") + " " + (p.email||"")).toLowerCase();
     html += '<tr data-search="' + attr(searchKey) + '">' + participantCells(p) +
       '<td style="text-align:center;"><button class="row-action" style="color:var(--blue-800);font-weight:700;font-family:var(--font-mono);" data-action="view-participant" data-id="' + p.id + '" title="View events attended">' + sessionCount + '</button></td>' +
       '<td><button class="row-action" data-action="delete-participant" data-id="' + p.id + '" title="Delete participant">&times;</button></td>' +
@@ -855,7 +877,7 @@ function participantDetailModalHTML(participantId){
       '<div class="modal-body"><div class="empty-note">This participant may have been deleted.</div></div>';
   }
   var attended = sortedEvents().filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; });
-  var html = '<div class="modal-header"><h3>' + esc(p.name) + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>';
+  var html = '<div class="modal-header"><h3>' + esc(fullName(p)) + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>';
   html += '<div class="modal-body">';
   html += '<div style="display:flex;flex-wrap:wrap;gap:8px 22px;margin-bottom:18px;font-size:13px;">';
   if (p.school) html += '<div><span style="color:var(--text-muted);">School</span><br>' + esc(p.school) + '</div>';
@@ -887,7 +909,8 @@ function participantDetailModalHTML(participantId){
 
 function participantCells(p){
   var html = '';
-  html += '<td><input type="text" value="' + attr(p.name) + '" data-field="name" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.firstName||"") + '" data-field="firstName" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.lastName||"") + '" data-field="lastName" data-participant="' + p.id + '"></td>';
   html += '<td><input type="text" value="' + attr(p.school||"") + '" data-field="school" data-participant="' + p.id + '"></td>';
   html += '<td><input type="text" value="' + attr(p.email||"") + '" data-field="email" data-participant="' + p.id + '"></td>';
   html += '<td><input type="text" value="' + attr(p.iein||"") + '" data-field="iein" data-participant="' + p.id + '"></td>';
@@ -1166,7 +1189,10 @@ function attendeeModalHTML(sessionId){
   return '<form id="attendee-form" data-action="submit-new-attendee" data-event="' + (sessionId||"") + '">' +
     '<div class="modal-header"><h3>' + (isEnroll ? "Add attendee" : "Add participant") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
-      '<div class="field"><label>Name</label><input type="text" name="name" required></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>First Name</label><input type="text" name="firstName" required></div>' +
+        '<div class="field"><label>Last Name</label><input type="text" name="lastName"></div>' +
+      '</div>' +
       '<div class="field-row">' +
         '<div class="field"><label>School</label><input type="text" name="school"></div>' +
         '<div class="field"><label>Email</label><input type="email" name="email"></div>' +
@@ -1192,7 +1218,7 @@ function existingAttendeeModalHTML(sessionId){
     html += '<div style="max-height:320px;overflow-y:auto;">';
     candidates.forEach(function(p){
       html += '<div class="side-list-item" style="cursor:pointer;" data-action="enroll-existing" data-event="' + sessionId + '" data-participant="' + p.id + '">' +
-        esc(p.name) + '<span class="sub">' + esc(p.school||"") + '</span></div>';
+        esc(fullName(p)) + '<span class="sub">' + esc(p.school||"") + '</span></div>';
     });
     html += '</div>';
   }
@@ -1329,9 +1355,10 @@ var ACTIONS = {
   "submit-new-attendee": function(form){
     var fd = new FormData(form);
     var eventId = form.getAttribute("data-event");
-    var name = (fd.get("name")||"").toString().trim();
-    if (!name) return;
-    var p = { id: uid(), name: name, school: (fd.get("school")||"").toString(), email: (fd.get("email")||"").toString(), iein: (fd.get("iein")||"").toString(), custom: {} };
+    var firstName = (fd.get("firstName")||"").toString().trim();
+    var lastName = (fd.get("lastName")||"").toString().trim();
+    if (!firstName) return;
+    var p = { id: uid(), firstName: firstName, lastName: lastName, school: (fd.get("school")||"").toString(), email: (fd.get("email")||"").toString(), iein: (fd.get("iein")||"").toString(), custom: {} };
     state.participants.push(p);
     var ev = eventById(eventId);
     if (ev){ ev.attendeeIds = ev.attendeeIds || []; ev.attendeeIds.push(p.id); }
@@ -1358,7 +1385,7 @@ var ACTIONS = {
     var id = t.getAttribute("data-id");
     var p = participantById(id);
     if (!p) return;
-    confirmModal('Remove "' + p.name + '" from the directory and every session?', function(){
+    confirmModal('Remove "' + fullName(p) + '" from the directory and every session?', function(){
       state.participants = state.participants.filter(function(pp){ return pp.id !== id; });
       state.events.forEach(function(e){ e.attendeeIds = (e.attendeeIds||[]).filter(function(pid){ return pid !== id; }); });
       saveState(); render();
@@ -1376,6 +1403,7 @@ var ACTIONS = {
     saveState(); closeModal(); render();
   },
   "download-template": function(){ downloadTemplate(); },
+  "export-participants": function(){ exportParticipantsCSV(); },
   "import-file": function(){
     var input = document.getElementById("file-import-input");
     input.value = "";
@@ -1478,18 +1506,24 @@ document.addEventListener("change", function(e){
 /* ============================================================
    Spreadsheet import
    ============================================================ */
+var FIRSTNAME_HEADERS = ["firstname","fname","first"];
+var LASTNAME_HEADERS = ["lastname","lname","last","surname"];
 var NAME_HEADERS = ["name","fullname","participantname","teachername","attendeename"];
 var SCHOOL_HEADERS = ["school","schoolname","district","organization","institution","site"];
 var EMAIL_HEADERS = ["email","emailaddress"];
 var IEIN_HEADERS = ["iein","ieinnumber","educatorid","illinoiseducatorid"];
+var IGNORED_HEADERS = ["totalsessions","totalnumberofsessions","sessionsattended","sessioncount","numberofsessions","sessions"];
 
 function normHeader(h){ return String(h||"").toLowerCase().trim().replace(/[^a-z0-9]/g, ""); }
 function matchCanonical(h){
   var n = normHeader(h);
+  if (FIRSTNAME_HEADERS.indexOf(n) !== -1) return "firstName";
+  if (LASTNAME_HEADERS.indexOf(n) !== -1) return "lastName";
   if (NAME_HEADERS.indexOf(n) !== -1) return "name";
   if (SCHOOL_HEADERS.indexOf(n) !== -1) return "school";
   if (EMAIL_HEADERS.indexOf(n) !== -1) return "email";
   if (IEIN_HEADERS.indexOf(n) !== -1) return "iein";
+  if (IGNORED_HEADERS.indexOf(n) !== -1) return "ignore";
   return null;
 }
 
@@ -1524,19 +1558,27 @@ function importRows(headerRow, dataRows, targetSessionId){
   var count = 0;
   dataRows.forEach(function(r){
     if (!r || r.every(function(c){ return String(c===undefined?"":c).trim() === ""; })) return;
-    var rec = { name: "", school: "", email: "", iein: "", custom: {} };
+    var rec = { firstName: "", lastName: "", name: "", school: "", email: "", iein: "", custom: {} };
     mapping.forEach(function(m, idx){
       var val = r[idx] !== undefined ? String(r[idx]).trim() : "";
-      if (m.canon) rec[m.canon] = val;
+      if (m.canon === "ignore"){ /* known field, not imported (e.g. a computed session count) */ }
+      else if (m.canon) rec[m.canon] = val;
       else if (m.header) rec.custom[m.header] = val;
     });
-    if (!rec.name && !rec.email) return;
+    if (!rec.firstName && !rec.lastName && rec.name){
+      var parts = rec.name.split(/\s+/).filter(Boolean);
+      if (parts.length > 1){ rec.lastName = parts.pop(); rec.firstName = parts.join(" "); }
+      else rec.firstName = rec.name;
+    }
+    if (!rec.firstName && !rec.lastName && !rec.email) return;
+    var recFull = (rec.firstName + " " + rec.lastName).trim().toLowerCase();
     var existing = null;
     if (rec.email) existing = state.participants.find(function(p){ return p.email && p.email.toLowerCase() === rec.email.toLowerCase(); });
-    if (!existing && rec.name) existing = state.participants.find(function(p){ return p.name.toLowerCase() === rec.name.toLowerCase() && (p.school||"").toLowerCase() === (rec.school||"").toLowerCase(); });
+    if (!existing && recFull) existing = state.participants.find(function(p){ return fullName(p).toLowerCase() === recFull && (p.school||"").toLowerCase() === (rec.school||"").toLowerCase(); });
     var target;
     if (existing){
-      if (rec.name) existing.name = rec.name;
+      if (rec.firstName) existing.firstName = rec.firstName;
+      if (rec.lastName) existing.lastName = rec.lastName;
       if (rec.school) existing.school = rec.school;
       if (rec.email) existing.email = rec.email;
       if (rec.iein) existing.iein = rec.iein;
@@ -1544,7 +1586,7 @@ function importRows(headerRow, dataRows, targetSessionId){
       Object.keys(rec.custom).forEach(function(k){ if (rec.custom[k]) existing.custom[k] = rec.custom[k]; });
       target = existing;
     } else {
-      target = { id: uid(), name: rec.name || "(Unnamed)", school: rec.school, email: rec.email, iein: rec.iein, custom: rec.custom };
+      target = { id: uid(), firstName: rec.firstName, lastName: rec.lastName, school: rec.school, email: rec.email, iein: rec.iein, custom: rec.custom };
       state.participants.push(target);
     }
     if (targetSessionId){
@@ -1597,12 +1639,31 @@ function csvEscape(v){
   return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 function downloadTemplate(){
-  var headers = ["Name","School","Email","IEIN"].concat(state.customFields);
+  var headers = ["First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
   var csv = headers.map(csvEscape).join(",") + "\n";
   var blob = new Blob([csv], { type: "text/csv" });
   var url = URL.createObjectURL(blob);
   var a = document.createElement("a");
   a.href = url; a.download = "participant_template.csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportParticipantsCSV(){
+  var headers = ["First Name","Last Name","School","Email","IEIN"].concat(state.customFields).concat(["Total Sessions"]);
+  var rows = [headers];
+  state.participants.forEach(function(p){
+    var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
+    var row = [p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
+    state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
+    row.push(sessionCount);
+    rows.push(row);
+  });
+  var csv = rows.map(function(r){ return r.map(csvEscape).join(","); }).join("\n");
+  var blob = new Blob([csv], { type: "text/csv" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = "participants_export.csv";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
