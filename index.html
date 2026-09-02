@@ -1003,6 +1003,12 @@ function sessionRosterHTML(session){
 /* ============================================================
    Budget view
    ============================================================ */
+var BUDGET_BOARD_IDS = ["board-cs-educator", "board-quantum", "board-summer", "board-ai-ambass"];
+
+function budgetEvents(){
+  return sortedEvents().filter(function(e){ return BUDGET_BOARD_IDS.indexOf(e.boardId) !== -1; });
+}
+
 function budgetViewHTML(){
   var html = '<div class="toolbar"><h2 class="page-title">Budget</h2><div class="grow"></div>' +
     '<button class="btn btn-primary" data-action="add-event" data-date="" data-context="budget">+ New event</button>' +
@@ -1023,7 +1029,7 @@ function budgetViewHTML(){
 }
 
 function budgetOverviewHTML(){
-  var events = sortedEvents();
+  var events = budgetEvents();
   if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
   var grandIncome = 0, grandExpense = 0;
   var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody>';
@@ -1078,7 +1084,7 @@ function budgetRowHTML(eventId, item){
 }
 
 function budgetChartsHTML(){
-  var events = sortedEvents();
+  var events = budgetEvents();
   var hasData = events.some(function(e){ return (e.budgetItems||[]).length; });
   if (!hasData) return emptyState("No budget data yet.", "Add line items to an event's budget to see charts here.");
   var html = '<div class="chart-card"><h4>Income vs. Expenses by Event</h4>' + barChartSVG(events) + '</div>';
