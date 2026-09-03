@@ -452,6 +452,28 @@ function migrateParticipant(p){
   return p;
 }
 
+function migrateBudgetItem(item){
+  if (item.general === undefined) item.general = item.description !== undefined ? item.description : "";
+  if (item.funds === undefined) item.funds = item.funding !== undefined ? item.funding : "";
+  if (item.qty === undefined && item.amount !== undefined){
+    item.qty = 1;
+    item.unitCost = Number(item.amount) || 0;
+  }
+  if (item.company === undefined) item.company = "";
+  if (item.cfoap === undefined) item.cfoap = "";
+  if (item.orderDate === undefined) item.orderDate = "";
+  if (item.qty === undefined) item.qty = 0;
+  if (item.unitCost === undefined) item.unitCost = 0;
+  if (item.shipping === undefined) item.shipping = 0;
+  item.total = (Number(item.qty) || 0) * (Number(item.unitCost) || 0);
+  item.totalCost = item.total + (Number(item.shipping) || 0);
+  delete item.description;
+  delete item.category;
+  delete item.funding;
+  delete item.amount;
+  return item;
+}
+
 function loadState(){
   var loaded = null;
   try{
@@ -463,6 +485,7 @@ function loadState(){
   }
   var s = ensureDefaults(loaded);
   s.participants.forEach(migrateParticipant);
+  s.events.forEach(function(e){ (e.budgetItems || []).forEach(migrateBudgetItem); });
   if (loaded && loaded.holidaysSeeded === undefined){
     s.holidaysSeeded = false;
   }
@@ -566,7 +589,7 @@ function visibleEvents(){
 function budgetTotals(ev){
   var income = 0, expense = 0;
   (ev.budgetItems || []).forEach(function(item){
-    var amt = Number(item.amount) || 0;
+    var amt = Number(item.totalCost) || 0;
     if (item.type === "Income") income += amt; else expense += amt;
   });
   return { income: income, expense: expense, net: income - expense };
@@ -1094,28 +1117,35 @@ function budgetDetailHTML(ev){
     '<button class="btn btn-danger btn-sm" data-action="delete-event" data-id="' + ev.id + '">Delete event</button>' +
     '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
   '</div>';
-  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Description</th><th>Category</th><th>CFOAP</th><th>Funding</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="budget-rows-body">';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>General</th><th>Type</th><th>Company</th><th>Funds</th><th>CFOAP</th><th>Order Date</th><th>Qty</th><th>Unit Cost</th><th>Total</th><th>Shipping</th><th>Total Cost</th><th></th>' +
+    '</tr></thead><tbody id="budget-rows-body">';
   (ev.budgetItems || []).forEach(function(item){
     html += budgetRowHTML(ev.id, item);
   });
   html += '</tbody><tfoot>' +
-    '<tr><td colspan="5">Income</td><td id="bt-income">' + fmtMoney(t.income) + '</td><td></td></tr>' +
-    '<tr><td colspan="5">Expenses</td><td id="bt-expense">' + fmtMoney(t.expense) + '</td><td></td></tr>' +
-    '<tr><td colspan="5">Net</td><td id="bt-net" style="color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td><td></td></tr>' +
+    '<tr><td colspan="10">Income</td><td id="bt-income">' + fmtMoney(t.income) + '</td><td></td></tr>' +
+    '<tr><td colspan="10">Expenses</td><td id="bt-expense">' + fmtMoney(t.expense) + '</td><td></td></tr>' +
+    '<tr><td colspan="10">Net</td><td id="bt-net" style="color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td><td></td></tr>' +
     '</tfoot></table></div>';
   return html;
 }
 function budgetRowHTML(eventId, item){
   return '<tr data-item-row="' + item.id + '">' +
-    '<td><input type="text" value="' + attr(item.description||"") + '" data-budget-field="description" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
-    '<td><input type="text" value="' + attr(item.category||"") + '" data-budget-field="category" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
-    '<td><input type="text" value="' + attr(item.cfoap||"") + '" data-budget-field="cfoap" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
-    '<td><input type="text" value="' + attr(item.funding||"") + '" data-budget-field="funding" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.general||"") + '" data-budget-field="general" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
     '<td><select data-budget-field="type" data-event="' + eventId + '" data-item="' + item.id + '">' +
       '<option value="Expense" ' + (item.type==="Expense"?"selected":"") + '>Expense</option>' +
       '<option value="Income" ' + (item.type==="Income"?"selected":"") + '>Income</option>' +
     '</select></td>' +
-    '<td><input type="number" step="0.01" value="' + (item.amount||0) + '" data-budget-field="amount" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.company||"") + '" data-budget-field="company" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.funds||"") + '" data-budget-field="funds" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.cfoap||"") + '" data-budget-field="cfoap" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="date" value="' + attr(item.orderDate||"") + '" data-budget-field="orderDate" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="number" step="1" value="' + (item.qty||0) + '" data-budget-field="qty" data-event="' + eventId + '" data-item="' + item.id + '" style="width:64px;"></td>' +
+    '<td><input type="number" step="0.01" value="' + (item.unitCost||0) + '" data-budget-field="unitCost" data-event="' + eventId + '" data-item="' + item.id + '" style="width:88px;"></td>' +
+    '<td id="bi-total-' + item.id + '" style="font-family:var(--font-mono);">' + fmtMoney(item.total||0) + '</td>' +
+    '<td><input type="number" step="0.01" value="' + (item.shipping||0) + '" data-budget-field="shipping" data-event="' + eventId + '" data-item="' + item.id + '" style="width:88px;"></td>' +
+    '<td id="bi-totalcost-' + item.id + '" style="font-family:var(--font-mono);font-weight:600;">' + fmtMoney(item.totalCost||0) + '</td>' +
     '<td><button class="row-action" data-action="remove-budget-row" data-event="' + eventId + '" data-item="' + item.id + '">&times;</button></td>' +
     '</tr>';
 }
@@ -1170,8 +1200,8 @@ function donutChartSVG(events){
   events.forEach(function(e){
     (e.budgetItems||[]).forEach(function(item){
       if (item.type !== "Expense") return;
-      var cat = (item.category || "").trim() || "Uncategorized";
-      totals[cat] = (totals[cat] || 0) + (Number(item.amount) || 0);
+      var cat = (item.general || "").trim() || "Uncategorized";
+      totals[cat] = (totals[cat] || 0) + (Number(item.totalCost) || 0);
     });
   });
   var cats = Object.keys(totals).filter(function(c){ return totals[c] > 0; }).sort(function(a,b){ return totals[b]-totals[a]; });
@@ -1665,7 +1695,7 @@ var ACTIONS = {
     var ev = eventById(t.getAttribute("data-event"));
     if (!ev) return;
     ev.budgetItems = ev.budgetItems || [];
-    ev.budgetItems.push({ id: uid(), description: "", category: "", cfoap: "", funding: "", type: "Expense", amount: 0 });
+    ev.budgetItems.push({ id: uid(), general: "", type: "Expense", company: "", funds: "", cfoap: "", orderDate: "", qty: 0, unitCost: 0, total: 0, shipping: 0, totalCost: 0 });
     saveState(); render();
   },
   "remove-budget-row": function(t){
@@ -1733,8 +1763,17 @@ document.addEventListener("input", function(e){
     var item = ev ? (ev.budgetItems||[]).find(function(i){ return i.id === t.getAttribute("data-item"); }) : null;
     if (item){
       var field = t.getAttribute("data-budget-field");
-      item[field] = field === "amount" ? (parseFloat(t.value) || 0) : t.value;
-      if (field === "amount" || field === "type"){
+      var numericFields = ["qty", "unitCost", "shipping"];
+      item[field] = numericFields.indexOf(field) !== -1 ? (parseFloat(t.value) || 0) : t.value;
+      if (numericFields.indexOf(field) !== -1){
+        item.total = (Number(item.qty) || 0) * (Number(item.unitCost) || 0);
+        item.totalCost = item.total + (Number(item.shipping) || 0);
+        var totalEl = document.getElementById("bi-total-" + item.id);
+        var totalCostEl = document.getElementById("bi-totalcost-" + item.id);
+        if (totalEl) totalEl.textContent = fmtMoney(item.total);
+        if (totalCostEl) totalCostEl.textContent = fmtMoney(item.totalCost);
+      }
+      if (numericFields.indexOf(field) !== -1 || field === "type"){
         var tt = budgetTotals(ev);
         var incEl = document.getElementById("bt-income"), expEl = document.getElementById("bt-expense"), netEl = document.getElementById("bt-net");
         if (incEl) incEl.textContent = fmtMoney(tt.income);
