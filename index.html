@@ -1094,14 +1094,14 @@ function budgetDetailHTML(ev){
     '<button class="btn btn-danger btn-sm" data-action="delete-event" data-id="' + ev.id + '">Delete event</button>' +
     '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
   '</div>';
-  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="budget-rows-body">';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Description</th><th>Category</th><th>CFOAP</th><th>Funding</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="budget-rows-body">';
   (ev.budgetItems || []).forEach(function(item){
     html += budgetRowHTML(ev.id, item);
   });
   html += '</tbody><tfoot>' +
-    '<tr><td colspan="3">Income</td><td id="bt-income">' + fmtMoney(t.income) + '</td><td></td></tr>' +
-    '<tr><td colspan="3">Expenses</td><td id="bt-expense">' + fmtMoney(t.expense) + '</td><td></td></tr>' +
-    '<tr><td colspan="3">Net</td><td id="bt-net" style="color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td><td></td></tr>' +
+    '<tr><td colspan="5">Income</td><td id="bt-income">' + fmtMoney(t.income) + '</td><td></td></tr>' +
+    '<tr><td colspan="5">Expenses</td><td id="bt-expense">' + fmtMoney(t.expense) + '</td><td></td></tr>' +
+    '<tr><td colspan="5">Net</td><td id="bt-net" style="color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td><td></td></tr>' +
     '</tfoot></table></div>';
   return html;
 }
@@ -1109,6 +1109,8 @@ function budgetRowHTML(eventId, item){
   return '<tr data-item-row="' + item.id + '">' +
     '<td><input type="text" value="' + attr(item.description||"") + '" data-budget-field="description" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
     '<td><input type="text" value="' + attr(item.category||"") + '" data-budget-field="category" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.cfoap||"") + '" data-budget-field="cfoap" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.funding||"") + '" data-budget-field="funding" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
     '<td><select data-budget-field="type" data-event="' + eventId + '" data-item="' + item.id + '">' +
       '<option value="Expense" ' + (item.type==="Expense"?"selected":"") + '>Expense</option>' +
       '<option value="Income" ' + (item.type==="Income"?"selected":"") + '>Income</option>' +
@@ -1663,7 +1665,7 @@ var ACTIONS = {
     var ev = eventById(t.getAttribute("data-event"));
     if (!ev) return;
     ev.budgetItems = ev.budgetItems || [];
-    ev.budgetItems.push({ id: uid(), description: "", category: "", type: "Expense", amount: 0 });
+    ev.budgetItems.push({ id: uid(), description: "", category: "", cfoap: "", funding: "", type: "Expense", amount: 0 });
     saveState(); render();
   },
   "remove-budget-row": function(t){
