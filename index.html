@@ -357,7 +357,10 @@ var DEFAULT_BOARDS = [
   { id: "board-cs-educator",  name: "CS Educator Workshop Series", color: "#13294B" },
   { id: "board-newsletters",  name: "Newsletters",                 color: "#E84A27" },
   { id: "board-conferences",  name: "Conferences",                 color: "#2E5A88" },
-  { id: "board-summer",       name: "Summer Intensives",           color: "#F1793F" },
+  { id: "board-summer",       name: "Summer Intensives",           color: "#F1793F", subcategories: [
+    { id: "subcat-si-26", name: "SI 26" },
+    { id: "subcat-si-tentative-27", name: "SI Tentative 27" }
+  ] },
   { id: "board-quantum",      name: "Quantum Workshops",           color: "#6B8CB8" },
   { id: "board-ai-ambass",    name: "AI Ambassadors",              color: "#F5A671" }
 ];
@@ -403,6 +406,20 @@ function seedHolidaysIfNeeded(s){
   return s;
 }
 
+function seedSummerSubcategoriesIfNeeded(s){
+  if (s.summerSubcatsSeeded) return s;
+  var board = s.boards.find(function(b){ return b.id === "board-summer"; });
+  if (board){
+    board.subcategories = board.subcategories || [];
+    var hasName = {};
+    board.subcategories.forEach(function(sc){ hasName[sc.name] = true; });
+    if (!hasName["SI 26"]) board.subcategories.push({ id: uid(), name: "SI 26" });
+    if (!hasName["SI Tentative 27"]) board.subcategories.push({ id: uid(), name: "SI Tentative 27" });
+  }
+  s.summerSubcatsSeeded = true;
+  return s;
+}
+
 function defaultState(){
   var s = {
     title: "DPI Teacher Training Calendar",
@@ -415,9 +432,10 @@ function defaultState(){
     calendarCursor: "2026-06",
     resourceLinks: [],
     holidaysSeeded: false,
+    summerSubcatsSeeded: true,
     budgetBoardIds: ["board-cs-educator", "board-summer", "board-ai-ambass"]
   };
-  return seedHolidaysIfNeeded(s);
+  return seedSummerSubcategoriesIfNeeded(seedHolidaysIfNeeded(s));
 }
 
 var CATEGORY_PALETTE = ["#13294B","#E84A27","#2E5A88","#F1793F","#6B8CB8","#F5A671","#0F8A5F","#8B5CF6","#C43D1F","#94A3B8"];
@@ -489,7 +507,11 @@ function loadState(){
   if (loaded && loaded.holidaysSeeded === undefined){
     s.holidaysSeeded = false;
   }
+  if (loaded && loaded.summerSubcatsSeeded === undefined){
+    s.summerSubcatsSeeded = false;
+  }
   seedHolidaysIfNeeded(s);
+  seedSummerSubcategoriesIfNeeded(s);
   return s;
 }
 
@@ -1077,30 +1099,70 @@ function budgetViewHTML(){
   return html;
 }
 
+function budgetEventRowHTML(e){
+  var t = budgetTotals(e);
+  return '<tr>' +
+    '<td style="padding-left:26px;"><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
+    '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
+    '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
+    '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
+    '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
+    '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
+    '</tr>';
+}
+
+function budgetSubtotalRowHTML(label, indent, bold, t, extraRowStyle){
+  return '<tr style="' + (bold?"font-weight:700;":"font-weight:600;") + (extraRowStyle||"") + '">' +
+    '<td colspan="2" style="padding-left:' + indent + 'px;">' + esc(label) + '</td>' +
+    '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
+    '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
+    '<td style="font-family:var(--font-mono);color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
+    '<td></td></tr>';
+}
+
+function sumTotals(evts){
+  var income = 0, expense = 0;
+  evts.forEach(function(e){ var t = budgetTotals(e); income += t.income; expense += t.expense; });
+  return { income: income, expense: expense, net: income - expense };
+}
+
 function budgetOverviewHTML(){
   var events = budgetEvents();
   if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
-  var grandIncome = 0, grandExpense = 0;
-  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Board</th><th>Sub-category</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th><th></th></tr></thead><tbody>';
-  events.forEach(function(e){
-    var t = budgetTotals(e);
-    var board = boardById(e.boardId);
-    var sub = subcategoryById(e.boardId, e.subcategoryId);
-    grandIncome += t.income; grandExpense += t.expense;
-    html += '<tr>' +
-      '<td><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
-      '<td>' + (board ? esc(board.name) : "&mdash;") + '</td>' +
-      '<td>' + (sub ? esc(sub.name) : "&mdash;") + '</td>' +
-      '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
-      '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
-      '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
-      '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
-      '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
-      '</tr>';
+  var ids = state.budgetBoardIds || [];
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th><th></th></tr></thead><tbody>';
+
+  ids.forEach(function(boardId){
+    var board = boardById(boardId);
+    var boardEvents = events.filter(function(e){ return e.boardId === boardId; });
+    if (!board || !boardEvents.length) return;
+
+    html += '<tr><td colspan="6" style="background:var(--blue-100);color:var(--blue-800);font-weight:700;">' + esc(board.name) + '</td></tr>';
+
+    var subs = board.subcategories || [];
+    if (subs.length){
+      subs.forEach(function(sc){
+        var scEvents = boardEvents.filter(function(e){ return e.subcategoryId === sc.id; });
+        if (!scEvents.length) return;
+        html += '<tr><td colspan="6" style="padding-left:14px;font-weight:600;color:var(--text-muted);font-size:12.5px;">' + esc(sc.name) + '</td></tr>';
+        scEvents.forEach(function(e){ html += budgetEventRowHTML(e); });
+        html += budgetSubtotalRowHTML("Subtotal — " + sc.name, 26, false, sumTotals(scEvents));
+      });
+      var subIds = subs.map(function(sc){ return sc.id; });
+      var unassigned = boardEvents.filter(function(e){ return !e.subcategoryId || subIds.indexOf(e.subcategoryId) === -1; });
+      if (unassigned.length){
+        html += '<tr><td colspan="6" style="padding-left:14px;font-weight:600;color:var(--text-muted);font-size:12.5px;">Unassigned</td></tr>';
+        unassigned.forEach(function(e){ html += budgetEventRowHTML(e); });
+      }
+    } else {
+      boardEvents.forEach(function(e){ html += budgetEventRowHTML(e); });
+    }
+
+    html += budgetSubtotalRowHTML(board.name + " total", 0, true, sumTotals(boardEvents));
   });
-  html += '</tbody><tfoot><tr><td colspan="4">Grand total</td>' +
-    '<td>' + fmtMoney(grandIncome) + '</td><td>' + fmtMoney(grandExpense) + '</td>' +
-    '<td style="color:' + ((grandIncome-grandExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(grandIncome-grandExpense) + '</td><td></td></tr></tfoot>';
+
+  var grand = sumTotals(events);
+  html += '</tbody><tfoot>' + budgetSubtotalRowHTML("Grand total", 0, true, grand, "border-top:2px solid var(--border);") + '</tfoot>';
   html += '</table></div>';
   return html;
 }
