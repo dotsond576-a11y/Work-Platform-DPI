@@ -300,6 +300,12 @@ table.data-table input, table.data-table select{border:1px solid transparent;bac
 table.data-table input:hover, table.data-table select:hover{border-color:var(--border);}
 table.data-table input:focus, table.data-table select:focus{border-color:var(--blue-600);background:#fff;}
 table.data-table tfoot td{font-weight:700;font-family:var(--font-mono);background:#F8FAFC;border-top:2px solid var(--border);}
+tr.budget-group-header td{background:var(--blue-800);color:#fff;font-family:var(--font-heading);font-weight:800;font-size:12.5px;padding:8px 12px;display:flex;align-items:center;gap:8px;}
+tr.budget-group-header .color-dot{border:1.5px solid rgba(255,255,255,0.85);}
+tr.budget-group-header:hover{background:none;}
+tr.budget-group-subtotal td{background:#F1F5F9;font-weight:700;font-family:var(--font-mono);border-top:1px solid var(--border);}
+tr.budget-group-subtotal:hover{background:#F1F5F9;}
+td.budget-indent{padding-left:24px;}
 .row-action{border:none;background:none;color:var(--text-faint);font-size:13px;padding:4px 6px;border-radius:6px;}
 .row-action:hover{color:#DC2626;background:#FEF2F2;}
 
@@ -1125,25 +1131,36 @@ function budgetViewHTML(){
 function budgetOverviewHTML(){
   var events = budgetEvents();
   if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
+  var ids = state.budgetBoardIds || [];
   var grandIncome = 0, grandExpense = 0;
-  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Board</th><th>Sub-category</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th><th></th></tr></thead><tbody>';
-  events.forEach(function(e){
-    var t = budgetTotals(e);
-    var board = boardById(e.boardId);
-    var sub = subcategoryById(e.boardId, e.subcategoryId);
-    grandIncome += t.income; grandExpense += t.expense;
-    html += '<tr>' +
-      '<td><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
-      '<td>' + (board ? esc(board.name) : "&mdash;") + '</td>' +
-      '<td>' + (sub ? esc(sub.name) : "&mdash;") + '</td>' +
-      '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
-      '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
-      '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
-      '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
-      '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
-      '</tr>';
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Sub-category</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th><th></th></tr></thead><tbody>';
+  ids.forEach(function(boardId){
+    var board = boardById(boardId);
+    if (!board) return;
+    var groupEvents = events.filter(function(e){ return e.boardId === boardId; });
+    if (!groupEvents.length) return;
+    var groupIncome = 0, groupExpense = 0;
+    html += '<tr class="budget-group-header"><td colspan="7"><span class="color-dot" style="background:' + board.color + '"></span>' + esc(board.name) + '</td></tr>';
+    groupEvents.forEach(function(e){
+      var t = budgetTotals(e);
+      var sub = subcategoryById(e.boardId, e.subcategoryId);
+      groupIncome += t.income; groupExpense += t.expense;
+      html += '<tr>' +
+        '<td class="budget-indent"><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
+        '<td>' + (sub ? esc(sub.name) : "&mdash;") + '</td>' +
+        '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
+        '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
+        '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
+        '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
+        '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
+        '</tr>';
+    });
+    grandIncome += groupIncome; grandExpense += groupExpense;
+    html += '<tr class="budget-group-subtotal"><td colspan="3">Subtotal &mdash; ' + esc(board.name) + '</td>' +
+      '<td>' + fmtMoney(groupIncome) + '</td><td>' + fmtMoney(groupExpense) + '</td>' +
+      '<td style="color:' + ((groupIncome-groupExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(groupIncome-groupExpense) + '</td><td></td></tr>';
   });
-  html += '</tbody><tfoot><tr><td colspan="4">Grand total</td>' +
+  html += '</tbody><tfoot><tr><td colspan="3">Grand total</td>' +
     '<td>' + fmtMoney(grandIncome) + '</td><td>' + fmtMoney(grandExpense) + '</td>' +
     '<td style="color:' + ((grandIncome-grandExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(grandIncome-grandExpense) + '</td><td></td></tr></tfoot>';
   html += '</table></div>';
