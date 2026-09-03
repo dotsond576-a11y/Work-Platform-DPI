@@ -361,6 +361,7 @@ td.budget-indent{padding-left:24px;}
 </div>
 <div id="modal-root"></div>
 <input type="file" id="file-import-input" accept=".csv,.xlsx,.xls" style="display:none;">
+<input type="file" id="mailinglist-import-input" accept=".csv,.xlsx,.xls" style="display:none;">
 <input type="file" id="backup-import-input" accept=".json" style="display:none;">
 
 <script>
@@ -437,7 +438,8 @@ function defaultState(){
     resourceLinks: [],
     holidaysSeeded: false,
     budgetBoardIds: ["board-cs-educator", "board-summer", "board-ai-ambass"],
-    attendanceBoardIds: ["board-cs-educator", "board-ai-ambass", "board-summer"]
+    attendanceBoardIds: ["board-cs-educator", "board-ai-ambass", "board-summer"],
+    mailingListBoardIds: ["board-newsletters"]
   };
   return seedHolidaysIfNeeded(s);
 }
@@ -617,7 +619,9 @@ var ui = {
   budgetTab: "overview",
   budgetDetailId: null,
   dragEventId: null,
-  participantSearch: ""
+  participantSearch: "",
+  mailingListBoardId: null,
+  mailingListDomain: "all"
 };
 
 /* ============================================================
@@ -636,7 +640,7 @@ function render(){
 
 function renderHeader(){
   var el = document.getElementById("app-header");
-  var views = [["calendar","Calendar"],["list","List"],["board","Board"],["attendance","Attendance"],["budget","Budget"],["resources","Resources"]];
+  var views = [["calendar","Calendar"],["list","List"],["board","Board"],["attendance","Attendance"],["mailinglist","Mailing List"],["budget","Budget"],["resources","Resources"]];
   el.innerHTML =
     '<div class="brand">' +
       '<div class="brand-mark">DPI</div>' +
@@ -745,6 +749,7 @@ function renderMain(){
   else if (state.currentView === "list") el.innerHTML = listViewHTML();
   else if (state.currentView === "board") el.innerHTML = boardViewHTML();
   else if (state.currentView === "attendance") el.innerHTML = attendanceViewHTML();
+  else if (state.currentView === "mailinglist") el.innerHTML = mailingListViewHTML();
   else if (state.currentView === "budget") el.innerHTML = budgetViewHTML();
   else if (state.currentView === "resources") el.innerHTML = resourcesViewHTML();
   if (state.currentView === "board") wireBoardDnD();
@@ -1112,6 +1117,108 @@ function sessionRosterHTML(session){
       '</tr>';
   });
   html += '</tbody></table></div>';
+  return html;
+}
+
+/* ============================================================
+   Mailing List view
+   ============================================================ */
+function mailingListBoardIds(){ return state.mailingListBoardIds || []; }
+
+function mailingListAreasBarHTML(){
+  var ids = mailingListBoardIds();
+  var chips = ids.map(function(id){
+    var b = boardById(id);
+    if (!b) return "";
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-100);color:var(--blue-800);border-radius:999px;padding:4px 6px 4px 12px;font-size:12.5px;font-weight:600;">' +
+      esc(b.name) +
+      '<button type="button" data-action="remove-mailinglist-board" data-id="' + id + '" title="Remove this list" style="border:none;background:none;cursor:pointer;color:var(--blue-800);opacity:0.6;font-size:14px;line-height:1;padding:0 2px;">&times;</button>' +
+      '</span>';
+  }).join("");
+  var available = state.boards.filter(function(b){ return b.id !== HOLIDAYS_BOARD_ID && !b.isFolder && ids.indexOf(b.id) === -1; });
+  var addControl = available.length ?
+    '<select id="add-mailinglist-board-select" style="font-size:12.5px;border:1px dashed var(--border);border-radius:999px;padding:4px 8px;color:var(--text-muted);background:#fff;">' +
+      '<option value="">+ Add a board&hellip;</option>' +
+      available.map(function(b){ return '<option value="' + b.id + '">' + esc(b.name) + '</option>'; }).join("") +
+    '</select>' : '';
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Mailing lists for:</span>' + chips + addControl +
+  '</div>';
+}
+
+function subscriberDomain(email){
+  var at = String(email||"").lastIndexOf("@");
+  if (at === -1) return "(no domain)";
+  return email.slice(at+1).trim().toLowerCase() || "(no domain)";
+}
+
+function mailingListDomainCounts(subscribers){
+  var counts = {};
+  subscribers.forEach(function(s){
+    var d = subscriberDomain(s.email);
+    counts[d] = (counts[d] || 0) + 1;
+  });
+  return Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a] || a.localeCompare(b); }).map(function(d){ return { domain: d, count: counts[d] }; });
+}
+
+function mailingListViewHTML(){
+  var ids = mailingListBoardIds();
+  if (!ids.length){
+    return '<div class="toolbar"><h2 class="page-title">Mailing List</h2></div>' + mailingListAreasBarHTML() +
+      emptyState("No mailing lists yet.", "Add a board above to start building an email list for it.");
+  }
+  if (!ui.mailingListBoardId || ids.indexOf(ui.mailingListBoardId) === -1) ui.mailingListBoardId = ids[0];
+  var activeBoard = boardById(ui.mailingListBoardId);
+  var subscribers = (activeBoard && activeBoard.subscribers) || [];
+  var domains = mailingListDomainCounts(subscribers);
+  var filtered = ui.mailingListDomain === "all" ? subscribers : subscribers.filter(function(s){ return subscriberDomain(s.email) === ui.mailingListDomain; });
+  filtered = filtered.slice().sort(function(a, b){
+    var an = ((a.lastName||"") + " " + (a.firstName||"")).trim().toLowerCase();
+    var bn = ((b.lastName||"") + " " + (b.firstName||"")).trim().toLowerCase();
+    return an.localeCompare(bn);
+  });
+
+  var html = '<div class="toolbar"><h2 class="page-title">Mailing List</h2><div class="grow"></div>' +
+    '<button class="btn" data-action="mailinglist-import-file">Import spreadsheet</button>' +
+    '<button class="btn" data-action="export-mailinglist">Export list</button>' +
+    '<button class="btn btn-primary" data-action="add-subscriber">+ Add subscriber</button>' +
+  '</div>';
+  html += mailingListAreasBarHTML();
+
+  if (ids.length > 1){
+    html += '<div class="tabs" style="margin-bottom:14px;">' + ids.map(function(id){
+      var b = boardById(id);
+      if (!b) return "";
+      return '<button class="' + (ui.mailingListBoardId===id?"active":"") + '" data-action="mailinglist-select-board" data-id="' + id + '">' + esc(b.name) + '</button>';
+    }).join("") + '</div>';
+  }
+
+  if (!subscribers.length){
+    html += emptyState("No subscribers yet.", "Import a spreadsheet or add subscribers one at a time for " + esc(activeBoard ? activeBoard.name : "this board") + ".");
+    return html;
+  }
+
+  html += '<div class="two-col">';
+  html += '<div class="side-list">';
+  html += '<div class="side-list-item ' + (ui.mailingListDomain==="all"?"active":"") + '" data-action="mailinglist-select-domain" data-domain="all">All Subscribers<span class="sub">' + subscribers.length + '</span></div>';
+  domains.forEach(function(d){
+    html += '<div class="side-list-item ' + (ui.mailingListDomain===d.domain?"active":"") + '" data-action="mailinglist-select-domain" data-domain="' + attr(d.domain) + '">' +
+              esc(d.domain) + '<span class="sub">' + d.count + '</span>' +
+            '</div>';
+  });
+  html += '</div>';
+  html += '<div class="content-col">';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>First Name</th><th>Last Name</th><th>Email</th><th></th></tr></thead><tbody>';
+  filtered.forEach(function(s){
+    html += '<tr>' +
+      '<td><input type="text" value="' + attr(s.firstName||"") + '" data-subscriber-field="firstName" data-board="' + activeBoard.id + '" data-subscriber="' + s.id + '"></td>' +
+      '<td><input type="text" value="' + attr(s.lastName||"") + '" data-subscriber-field="lastName" data-board="' + activeBoard.id + '" data-subscriber="' + s.id + '"></td>' +
+      '<td><input type="text" value="' + attr(s.email||"") + '" data-subscriber-field="email" data-board="' + activeBoard.id + '" data-subscriber="' + s.id + '"></td>' +
+      '<td><button class="row-action" data-action="remove-subscriber" data-board="' + activeBoard.id + '" data-id="' + s.id + '" title="Remove">&times;</button></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '</div></div>';
   return html;
 }
 
@@ -1517,6 +1624,24 @@ function attendeeModalHTML(sessionId){
   '</form>';
 }
 
+function subscriberModalHTML(boardId){
+  var board = boardById(boardId);
+  return '<form id="subscriber-form" data-submit-action="submit-subscriber-form" data-board="' + boardId + '">' +
+    '<div class="modal-header"><h3>Add subscriber' + (board ? ' &mdash; ' + esc(board.name) : '') + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field-row">' +
+        '<div class="field"><label>First Name</label><input type="text" name="firstName"></div>' +
+        '<div class="field"><label>Last Name</label><input type="text" name="lastName"></div>' +
+      '</div>' +
+      '<div class="field"><label>Email</label><input type="email" name="email" required></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">Add subscriber</button>' +
+    '</div>' +
+  '</form>';
+}
+
 function existingAttendeeModalHTML(sessionId){
   var session = eventById(sessionId);
   var already = session ? (session.attendeeIds||[]) : [];
@@ -1568,7 +1693,7 @@ var ACTIONS = {
     confirmModal("This will permanently erase all boards, events, participants, and budgets, and restore the default setup. Continue?", function(){
       confirmModal("Last chance: everything currently saved will be gone for good, with no way to undo it. Erase it all?", function(){
         state = defaultState();
-        ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "" };
+        ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all" };
         saveState(); render();
       }, { title: "Are you absolutely sure?", confirmLabel: "Yes, erase everything" });
     }, { title: "Reset all data?", confirmLabel: "Reset everything" });
@@ -1622,9 +1747,11 @@ var ACTIONS = {
     var id = t.getAttribute("data-id");
     var b = boardById(id);
     if (!b) return;
+    var subCount = (b.subscribers || []).length;
     var msg = b.isFolder
       ? 'Delete "' + b.name + '"? Its sub-boards will become top-level boards (not deleted).'
-      : 'Delete "' + b.name + '"? Events on this board will become uncategorized (not deleted).';
+      : 'Delete "' + b.name + '"? Events on this board will become uncategorized (not deleted)' +
+        (subCount ? ", and its mailing list of " + subCount + " subscriber" + (subCount===1?"":"s") + " will be permanently deleted" : "") + '.';
     confirmModal(msg, function(){
       if (b.isFolder){
         state.boards.forEach(function(bb){ if (bb.parentId === id) bb.parentId = null; });
@@ -1634,6 +1761,7 @@ var ACTIONS = {
       state.boards = state.boards.filter(function(bb){ return bb.id !== id; });
       state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
       state.attendanceBoardIds = (state.attendanceBoardIds || []).filter(function(bid){ return bid !== id; });
+      state.mailingListBoardIds = (state.mailingListBoardIds || []).filter(function(bid){ return bid !== id; });
       if (state.boardFilter === id) state.boardFilter = null;
       saveState(); render();
     }, { title: "Delete board?" });
@@ -1677,6 +1805,7 @@ var ACTIONS = {
         state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
         state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
         state.attendanceBoardIds = (state.attendanceBoardIds || []).filter(function(bid){ return bid !== id; });
+        state.mailingListBoardIds = (state.mailingListBoardIds || []).filter(function(bid){ return bid !== id; });
       }
       var keepIds = {};
       subcategories.forEach(function(sc){ keepIds[sc.id] = true; });
@@ -1829,6 +1958,57 @@ var ACTIONS = {
     input.click();
   },
 
+  "remove-mailinglist-board": function(t){
+    var id = t.getAttribute("data-id");
+    state.mailingListBoardIds = (state.mailingListBoardIds || []).filter(function(bid){ return bid !== id; });
+    if (ui.mailingListBoardId === id) ui.mailingListBoardId = null;
+    saveState(); render();
+  },
+  "mailinglist-select-board": function(t){
+    ui.mailingListBoardId = t.getAttribute("data-id");
+    ui.mailingListDomain = "all";
+    render();
+  },
+  "mailinglist-select-domain": function(t){
+    ui.mailingListDomain = t.getAttribute("data-domain");
+    render();
+  },
+  "add-subscriber": function(){
+    if (!ui.mailingListBoardId) return;
+    openModal(subscriberModalHTML(ui.mailingListBoardId));
+  },
+  "submit-subscriber-form": function(form){
+    var fd = new FormData(form);
+    var boardId = form.getAttribute("data-board");
+    var board = boardById(boardId);
+    if (!board) return;
+    var email = (fd.get("email")||"").toString().trim();
+    if (!email) return;
+    board.subscribers = board.subscribers || [];
+    board.subscribers.push({
+      id: uid(),
+      firstName: (fd.get("firstName")||"").toString().trim(),
+      lastName: (fd.get("lastName")||"").toString().trim(),
+      email: email
+    });
+    saveState(); closeModal(); render();
+  },
+  "remove-subscriber": function(t){
+    var board = boardById(t.getAttribute("data-board"));
+    if (!board) return;
+    var id = t.getAttribute("data-id");
+    confirmModal("Remove this subscriber from the mailing list?", function(){
+      board.subscribers = (board.subscribers||[]).filter(function(s){ return s.id !== id; });
+      saveState(); render();
+    }, { title: "Remove subscriber?" });
+  },
+  "mailinglist-import-file": function(){
+    var input = document.getElementById("mailinglist-import-input");
+    input.value = "";
+    input.click();
+  },
+  "export-mailinglist": function(){ exportMailingListCSV(); },
+
   "budget-tab": function(t){ ui.budgetTab = t.getAttribute("data-tab"); render(); },
   "budget-detail": function(t){ ui.budgetTab = "detail"; ui.budgetDetailId = t.getAttribute("data-id"); render(); },
   "add-budget-row": function(t){
@@ -1917,6 +2097,11 @@ document.addEventListener("input", function(e){
       }
     }
     saveState();
+  } else if (t.matches("[data-subscriber-field]")){
+    var board2 = boardById(t.getAttribute("data-board"));
+    var subscriber = board2 ? (board2.subscribers||[]).find(function(s){ return s.id === t.getAttribute("data-subscriber"); }) : null;
+    if (subscriber) subscriber[t.getAttribute("data-subscriber-field")] = t.value;
+    saveState();
   }
 });
 document.addEventListener("change", function(e){
@@ -1934,6 +2119,13 @@ document.addEventListener("change", function(e){
     if (t.value){
       state.attendanceBoardIds = state.attendanceBoardIds || [];
       state.attendanceBoardIds.push(t.value);
+      saveState(); render();
+    }
+  } else if (t.matches("#add-mailinglist-board-select")){
+    if (t.value){
+      state.mailingListBoardIds = state.mailingListBoardIds || [];
+      state.mailingListBoardIds.push(t.value);
+      ui.mailingListBoardId = t.value;
       saveState(); render();
     }
   }
@@ -2039,15 +2231,13 @@ function importRows(headerRow, dataRows, targetSessionId){
   alertModal("Imported " + count + " participant" + (count === 1 ? "" : "s") + ".", "Import complete");
 }
 
-function handleImportFile(file){
-  var targetSessionId = (ui.attendanceSession && ui.attendanceSession !== "directory") ? ui.attendanceSession : null;
+function readSpreadsheetRows(file, callback){
   var ext = file.name.split(".").pop().toLowerCase();
   if (ext === "csv"){
     var reader = new FileReader();
     reader.onload = function(e){
       var rows = parseCSV(e.target.result);
-      if (!rows.length) return;
-      importRows(rows[0], rows.slice(1), targetSessionId);
+      if (rows.length) callback(rows[0], rows.slice(1));
     };
     reader.readAsText(file);
   } else if (ext === "xlsx" || ext === "xls"){
@@ -2061,17 +2251,63 @@ function handleImportFile(file){
       var wb = XLSX.read(data, { type: "array" });
       var sheet = wb.Sheets[wb.SheetNames[0]];
       var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-      if (!rows.length) return;
-      importRows(rows[0], rows.slice(1), targetSessionId);
+      if (rows.length) callback(rows[0], rows.slice(1));
     };
     reader2.readAsArrayBuffer(file);
   } else {
     alertModal("Unsupported file type. Please upload a .csv, .xlsx, or .xls file.", "Import unavailable");
   }
 }
+
+function handleImportFile(file){
+  var targetSessionId = (ui.attendanceSession && ui.attendanceSession !== "directory") ? ui.attendanceSession : null;
+  readSpreadsheetRows(file, function(headerRow, dataRows){ importRows(headerRow, dataRows, targetSessionId); });
+}
 document.getElementById("file-import-input").addEventListener("change", function(e){
   var file = e.target.files && e.target.files[0];
   if (file) handleImportFile(file);
+});
+
+function importMailingListRows(headerRow, dataRows, boardId){
+  var board = boardById(boardId);
+  if (!board) return;
+  var mapping = headerRow.map(function(h){ return { header: String(h||"").trim(), canon: matchCanonical(h) }; });
+  board.subscribers = board.subscribers || [];
+  var count = 0;
+  dataRows.forEach(function(r){
+    if (!r || r.every(function(c){ return String(c===undefined?"":c).trim() === ""; })) return;
+    var rec = { firstName: "", lastName: "", name: "", email: "" };
+    mapping.forEach(function(m, idx){
+      var val = r[idx] !== undefined ? String(r[idx]).trim() : "";
+      if (m.canon === "firstName" || m.canon === "lastName" || m.canon === "name" || m.canon === "email") rec[m.canon] = val;
+    });
+    if (!rec.firstName && !rec.lastName && rec.name){
+      var parts = rec.name.split(/\s+/).filter(Boolean);
+      if (parts.length > 1){ rec.lastName = parts.pop(); rec.firstName = parts.join(" "); }
+      else rec.firstName = rec.name;
+    }
+    if (!rec.email) return;
+    var existing = board.subscribers.find(function(s){ return (s.email||"").toLowerCase() === rec.email.toLowerCase(); });
+    if (existing){
+      if (rec.firstName) existing.firstName = rec.firstName;
+      if (rec.lastName) existing.lastName = rec.lastName;
+    } else {
+      board.subscribers.push({ id: uid(), firstName: rec.firstName, lastName: rec.lastName, email: rec.email });
+    }
+    count++;
+  });
+  saveState(); render();
+  alertModal("Imported " + count + " subscriber" + (count === 1 ? "" : "s") + ".", "Import complete");
+}
+
+function handleMailingListImportFile(file){
+  var boardId = ui.mailingListBoardId;
+  if (!boardId) return;
+  readSpreadsheetRows(file, function(headerRow, dataRows){ importMailingListRows(headerRow, dataRows, boardId); });
+}
+document.getElementById("mailinglist-import-input").addEventListener("change", function(e){
+  var file = e.target.files && e.target.files[0];
+  if (file) handleMailingListImportFile(file);
 });
 
 function csvEscape(v){
@@ -2136,6 +2372,16 @@ function exportAllAttendanceCSV(){
   downloadCSVRows(rows, "attendance_all_sessions.csv");
 }
 
+function exportMailingListCSV(){
+  var board = boardById(ui.mailingListBoardId);
+  if (!board) return;
+  var subscribers = board.subscribers || [];
+  if (ui.mailingListDomain !== "all") subscribers = subscribers.filter(function(s){ return subscriberDomain(s.email) === ui.mailingListDomain; });
+  var rows = [["First Name","Last Name","Email"]].concat(subscribers.map(function(s){ return [s.firstName||"", s.lastName||"", s.email||""]; }));
+  var suffix = ui.mailingListDomain === "all" ? "all" : ui.mailingListDomain.replace(/[^a-z0-9.]+/gi, "_");
+  downloadCSVRows(rows, "mailing_list_" + slugify(board.name) + "_" + suffix + ".csv");
+}
+
 /* ============================================================
    Backup export / import
    ============================================================ */
@@ -2168,7 +2414,7 @@ function handleBackupFile(file){
     confirmModal("This will replace everything currently in the calendar (boards, events, participants, budgets) with the contents of this backup file. This can't be undone. Continue?", function(){
       state = ensureDefaults(restored);
       state.participants.forEach(migrateParticipant);
-      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "" };
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all" };
       saveState(); render();
       alertModal("Backup restored successfully.", "Import complete");
     }, { title: "Restore backup?", confirmLabel: "Restore backup" });
