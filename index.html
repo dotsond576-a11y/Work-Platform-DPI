@@ -586,13 +586,17 @@ function visibleEvents(){
   }
   return list;
 }
+function budgetItemTotals(item){
+  var qty = Number(item.qty) || 0;
+  var unitCost = Number(item.unitCost) || 0;
+  var shipping = Number(item.shipping) || 0;
+  var total = qty * unitCost;
+  return { total: total, totalCost: total + shipping };
+}
 function budgetTotals(ev){
-  var income = 0, expense = 0;
-  (ev.budgetItems || []).forEach(function(item){
-    var amt = Number(item.amount) || 0;
-    if (item.type === "Income") income += amt; else expense += amt;
-  });
-  return { income: income, expense: expense, net: income - expense };
+  var total = 0;
+  (ev.budgetItems || []).forEach(function(item){ total += budgetItemTotals(item).totalCost; });
+  return { total: total };
 }
 
 /* ============================================================
@@ -1132,37 +1136,33 @@ function budgetOverviewHTML(){
   var events = budgetEvents();
   if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
   var ids = state.budgetBoardIds || [];
-  var grandIncome = 0, grandExpense = 0;
-  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Sub-category</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th><th></th></tr></thead><tbody>';
+  var grandTotal = 0;
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Sub-category</th><th>Date</th><th>Total Cost</th><th></th></tr></thead><tbody>';
   ids.forEach(function(boardId){
     var board = boardById(boardId);
     if (!board) return;
     var groupEvents = events.filter(function(e){ return e.boardId === boardId; });
     if (!groupEvents.length) return;
-    var groupIncome = 0, groupExpense = 0;
-    html += '<tr class="budget-group-header"><td colspan="7"><span class="color-dot" style="background:' + board.color + '"></span>' + esc(board.name) + '</td></tr>';
+    var groupTotal = 0;
+    html += '<tr class="budget-group-header"><td colspan="5"><span class="color-dot" style="background:' + board.color + '"></span>' + esc(board.name) + '</td></tr>';
     groupEvents.forEach(function(e){
       var t = budgetTotals(e);
       var sub = subcategoryById(e.boardId, e.subcategoryId);
-      groupIncome += t.income; groupExpense += t.expense;
+      groupTotal += t.total;
       html += '<tr>' +
         '<td class="budget-indent"><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
         '<td>' + (sub ? esc(sub.name) : "&mdash;") + '</td>' +
         '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
-        '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
-        '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
-        '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
+        '<td style="font-family:var(--font-mono);font-weight:700;">' + fmtMoney(t.total) + '</td>' +
         '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
         '</tr>';
     });
-    grandIncome += groupIncome; grandExpense += groupExpense;
+    grandTotal += groupTotal;
     html += '<tr class="budget-group-subtotal"><td colspan="3">Subtotal &mdash; ' + esc(board.name) + '</td>' +
-      '<td>' + fmtMoney(groupIncome) + '</td><td>' + fmtMoney(groupExpense) + '</td>' +
-      '<td style="color:' + ((groupIncome-groupExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(groupIncome-groupExpense) + '</td><td></td></tr>';
+      '<td>' + fmtMoney(groupTotal) + '</td><td></td></tr>';
   });
   html += '</tbody><tfoot><tr><td colspan="3">Grand total</td>' +
-    '<td>' + fmtMoney(grandIncome) + '</td><td>' + fmtMoney(grandExpense) + '</td>' +
-    '<td style="color:' + ((grandIncome-grandExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(grandIncome-grandExpense) + '</td><td></td></tr></tfoot>';
+    '<td>' + fmtMoney(grandTotal) + '</td><td></td></tr></tfoot>';
   html += '</table></div>';
   return html;
 }
@@ -1179,26 +1179,31 @@ function budgetDetailHTML(ev){
     '<button class="btn btn-danger btn-sm" data-action="delete-event" data-id="' + ev.id + '">Delete event</button>' +
     '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
   '</div>';
-  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="budget-rows-body">';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+      '<th>General</th><th>Company</th><th>Funds</th><th>CFOAP</th><th>Order Date</th>' +
+      '<th>Qty</th><th>Unit Cost</th><th>Total</th><th>Shipping</th><th>Total Cost</th><th></th>' +
+    '</tr></thead><tbody id="budget-rows-body">';
   (ev.budgetItems || []).forEach(function(item){
     html += budgetRowHTML(ev.id, item);
   });
   html += '</tbody><tfoot>' +
-    '<tr><td colspan="3">Income</td><td id="bt-income">' + fmtMoney(t.income) + '</td><td></td></tr>' +
-    '<tr><td colspan="3">Expenses</td><td id="bt-expense">' + fmtMoney(t.expense) + '</td><td></td></tr>' +
-    '<tr><td colspan="3">Net</td><td id="bt-net" style="color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td><td></td></tr>' +
+    '<tr><td colspan="9">Total</td><td id="bt-total">' + fmtMoney(t.total) + '</td><td></td></tr>' +
     '</tfoot></table></div>';
   return html;
 }
 function budgetRowHTML(eventId, item){
+  var t = budgetItemTotals(item);
   return '<tr data-item-row="' + item.id + '">' +
-    '<td><input type="text" value="' + attr(item.description||"") + '" data-budget-field="description" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
-    '<td><input type="text" value="' + attr(item.category||"") + '" data-budget-field="category" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
-    '<td><select data-budget-field="type" data-event="' + eventId + '" data-item="' + item.id + '">' +
-      '<option value="Expense" ' + (item.type==="Expense"?"selected":"") + '>Expense</option>' +
-      '<option value="Income" ' + (item.type==="Income"?"selected":"") + '>Income</option>' +
-    '</select></td>' +
-    '<td><input type="number" step="0.01" value="' + (item.amount||0) + '" data-budget-field="amount" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.general||"") + '" data-budget-field="general" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.company||"") + '" data-budget-field="company" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.funds||"") + '" data-budget-field="funds" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.cfoap||"") + '" data-budget-field="cfoap" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="date" value="' + attr(item.orderDate||"") + '" data-budget-field="orderDate" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="number" step="1" value="' + (item.qty||0) + '" data-budget-field="qty" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="number" step="0.01" value="' + (item.unitCost||0) + '" data-budget-field="unitCost" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td data-item-total="' + item.id + '" style="font-family:var(--font-mono);">' + fmtMoney(t.total) + '</td>' +
+    '<td><input type="number" step="0.01" value="' + (item.shipping||0) + '" data-budget-field="shipping" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td data-item-total-cost="' + item.id + '" style="font-family:var(--font-mono);font-weight:700;">' + fmtMoney(t.totalCost) + '</td>' +
     '<td><button class="row-action" data-action="remove-budget-row" data-event="' + eventId + '" data-item="' + item.id + '">&times;</button></td>' +
     '</tr>';
 }
@@ -1207,21 +1212,21 @@ function budgetChartsHTML(){
   var events = budgetEvents();
   var hasData = events.some(function(e){ return (e.budgetItems||[]).length; });
   if (!hasData) return emptyState("No budget data yet.", "Add line items to an event's budget to see charts here.");
-  var html = '<div class="chart-card"><h4>Income vs. Expenses by Event</h4>' + barChartSVG(events) + '</div>';
-  html += '<div class="chart-card"><h4>Expenses by Category</h4>' + donutChartSVG(events) + '</div>';
+  var html = '<div class="chart-card"><h4>Total Cost by Event</h4>' + barChartSVG(events) + '</div>';
+  html += '<div class="chart-card"><h4>Total Cost by Funds</h4>' + donutChartSVG(events) + '</div>';
   return html;
 }
 
 function barChartSVG(events){
-  var data = events.map(function(e){ var t = budgetTotals(e); return { name: e.title, income: t.income, expense: t.expense }; })
-                    .filter(function(d){ return d.income || d.expense; });
+  var data = events.map(function(e){ var t = budgetTotals(e); return { name: e.title, total: t.total }; })
+                    .filter(function(d){ return d.total; });
   if (!data.length) return emptyState("No budget data yet.", "");
   var w = 720, h = 320, padL = 60, padB = 70, padT = 20, padR = 20;
   var chartW = w - padL - padR, chartH = h - padT - padB;
-  var maxVal = Math.max.apply(null, data.map(function(d){ return Math.max(d.income, d.expense); }).concat([1]));
+  var maxVal = Math.max.apply(null, data.map(function(d){ return d.total; }).concat([1]));
   var niceMax = Math.ceil(maxVal / 5) * 5 || 5;
   var groupW = chartW / data.length;
-  var barW = Math.min(34, groupW / 3);
+  var barW = Math.min(44, groupW / 2);
   var svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;max-width:760px;" font-family="Inter, sans-serif">';
   for (var g = 0; g <= 4; g++){
     var gy = padT + chartH - (chartH * g / 4);
@@ -1231,34 +1236,26 @@ function barChartSVG(events){
   }
   data.forEach(function(d, i){
     var cx = padL + groupW * i + groupW/2;
-    var incH = (d.income / niceMax) * chartH;
-    var expH = (d.expense / niceMax) * chartH;
-    var ix = cx - barW - 3, ex = cx + 3;
-    svg += '<rect x="' + ix + '" y="' + (padT+chartH-incH) + '" width="' + barW + '" height="' + incH + '" fill="#13294B" rx="3"/>';
-    svg += '<rect x="' + ex + '" y="' + (padT+chartH-expH) + '" width="' + barW + '" height="' + expH + '" fill="#E84A27" rx="3"/>';
+    var barH = (d.total / niceMax) * chartH;
+    svg += '<rect x="' + (cx-barW/2) + '" y="' + (padT+chartH-barH) + '" width="' + barW + '" height="' + barH + '" fill="#13294B" rx="3"/>';
     var label = d.name.length > 14 ? d.name.slice(0,13) + "…" : d.name;
     svg += '<text x="' + cx + '" y="' + (padT+chartH+18) + '" font-size="10.5" fill="#1A202C" text-anchor="middle">' + esc(label) + '</text>';
   });
   svg += '<line x1="' + padL + '" y1="' + (padT+chartH) + '" x2="' + (w-padR) + '" y2="' + (padT+chartH) + '" stroke="#94A3B8" stroke-width="1.5"/>';
   svg += '</svg>';
-  var legend = '<div class="legend">' +
-    '<div class="legend-item"><span class="legend-swatch" style="background:#13294B"></span>Income</div>' +
-    '<div class="legend-item"><span class="legend-swatch" style="background:#E84A27"></span>Expenses</div>' +
-    '</div>';
-  return svg + legend;
+  return svg;
 }
 
 function donutChartSVG(events){
   var totals = {};
   events.forEach(function(e){
     (e.budgetItems||[]).forEach(function(item){
-      if (item.type !== "Expense") return;
-      var cat = (item.category || "").trim() || "Uncategorized";
-      totals[cat] = (totals[cat] || 0) + (Number(item.amount) || 0);
+      var fund = (item.funds || "").trim() || "Unspecified";
+      totals[fund] = (totals[fund] || 0) + budgetItemTotals(item).totalCost;
     });
   });
   var cats = Object.keys(totals).filter(function(c){ return totals[c] > 0; }).sort(function(a,b){ return totals[b]-totals[a]; });
-  if (!cats.length) return emptyState("No expense data yet.", "");
+  if (!cats.length) return emptyState("No cost data yet.", "");
   var grand = cats.reduce(function(s,c){ return s + totals[c]; }, 0);
   var r = 80, cx = 110, cy = 110, circumference = 2 * Math.PI * r, strokeW = 34;
   var offset = 0;
@@ -1791,7 +1788,7 @@ var ACTIONS = {
     var ev = eventById(t.getAttribute("data-event"));
     if (!ev) return;
     ev.budgetItems = ev.budgetItems || [];
-    ev.budgetItems.push({ id: uid(), description: "", category: "", type: "Expense", amount: 0 });
+    ev.budgetItems.push({ id: uid(), general: "", company: "", funds: "", cfoap: "", orderDate: "", qty: 1, unitCost: 0, shipping: 0 });
     saveState(); render();
   },
   "remove-budget-row": function(t){
@@ -1859,13 +1856,17 @@ document.addEventListener("input", function(e){
     var item = ev ? (ev.budgetItems||[]).find(function(i){ return i.id === t.getAttribute("data-item"); }) : null;
     if (item){
       var field = t.getAttribute("data-budget-field");
-      item[field] = field === "amount" ? (parseFloat(t.value) || 0) : t.value;
-      if (field === "amount" || field === "type"){
+      var numericFields = { qty: 1, unitCost: 1, shipping: 1 };
+      item[field] = numericFields[field] ? (parseFloat(t.value) || 0) : t.value;
+      if (numericFields[field]){
+        var itemTotals = budgetItemTotals(item);
+        var totalEl = document.querySelector('[data-item-total="' + item.id + '"]');
+        var totalCostEl = document.querySelector('[data-item-total-cost="' + item.id + '"]');
+        if (totalEl) totalEl.textContent = fmtMoney(itemTotals.total);
+        if (totalCostEl) totalCostEl.textContent = fmtMoney(itemTotals.totalCost);
         var tt = budgetTotals(ev);
-        var incEl = document.getElementById("bt-income"), expEl = document.getElementById("bt-expense"), netEl = document.getElementById("bt-net");
-        if (incEl) incEl.textContent = fmtMoney(tt.income);
-        if (expEl) expEl.textContent = fmtMoney(tt.expense);
-        if (netEl){ netEl.textContent = fmtMoney(tt.net); netEl.style.color = tt.net >= 0 ? "#0F8A5F" : "#DC2626"; }
+        var totalRowEl = document.getElementById("bt-total");
+        if (totalRowEl) totalRowEl.textContent = fmtMoney(tt.total);
       }
     }
     saveState();
@@ -1873,9 +1874,7 @@ document.addEventListener("input", function(e){
 });
 document.addEventListener("change", function(e){
   var t = e.target;
-  if (t.matches("[data-budget-field='type']")){
-    // handled by input listener already firing on select change in most browsers; ensure totals update
-  } else if (t.matches("#event-form select[name='boardId']")){
+  if (t.matches("#event-form select[name='boardId']")){
     var wrap = document.getElementById("subcat-wrap");
     if (wrap) wrap.innerHTML = subcategoryFieldHTML(boardById(t.value), null);
   } else if (t.matches("#add-budget-board-select")){
