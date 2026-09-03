@@ -1665,6 +1665,9 @@ var ACTIONS = {
     var date = t.getAttribute("data-date") || todayISO();
     var filterBoard = state.boardFilter && state.boardFilter !== "uncategorized" ? boardById(state.boardFilter) : null;
     var boardId = t.getAttribute("data-board") || ((filterBoard && !filterBoard.isFolder) ? filterBoard.id : "");
+    if (!boardId && t.getAttribute("data-context") === "budget"){
+      boardId = (state.budgetBoardIds || [])[0] || "";
+    }
     openModal(eventModalHTML(null, date, boardId));
   },
   "edit-event": function(t){ openModal(eventModalHTML(t.getAttribute("data-id"))); },
@@ -1684,6 +1687,10 @@ var ACTIONS = {
       e.title = title; e.date = date; e.endDate = endDate; e.boardId = boardId; e.subcategoryId = subcategoryId; e.notes = notes;
     } else {
       state.events.push({ id: uid(), title: title, date: date, endDate: endDate, boardId: boardId, subcategoryId: subcategoryId, notes: notes, attendeeIds: [], budgetItems: [] });
+    }
+    if (state.currentView === "budget" && boardId){
+      state.budgetBoardIds = state.budgetBoardIds || [];
+      if (state.budgetBoardIds.indexOf(boardId) === -1) state.budgetBoardIds.push(boardId);
     }
     state.calendarCursor = date.slice(0, 7);
     saveState(); closeModal(); render();
