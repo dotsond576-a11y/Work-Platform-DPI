@@ -421,7 +421,8 @@ function defaultState(){
     currentView: "calendar",
     calendarCursor: "2026-06",
     resourceLinks: [],
-    holidaysSeeded: false
+    holidaysSeeded: false,
+    budgetBoardIds: ["board-cs-educator", "board-summer", "board-ai-ambass"]
   };
   return seedHolidaysIfNeeded(s);
 }
@@ -545,6 +546,11 @@ function fmtMoney(n){
   return sign + "$" + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function boardById(id){ return state.boards.find(function(b){ return b.id === id; }) || null; }
+function subcategoryById(boardId, subcategoryId){
+  var b = boardById(boardId);
+  if (!b || !subcategoryId) return null;
+  return (b.subcategories || []).find(function(sc){ return sc.id === subcategoryId; }) || null;
+}
 function boardColor(id){ var b = boardById(id); return b ? b.color : "#94A3B8"; }
 function boardName(id){ var b = boardById(id); return b ? b.name : "Uncategorized"; }
 function eventById(id){ return state.events.find(function(e){ return e.id === id; }); }
@@ -1071,6 +1077,32 @@ function sessionRosterHTML(session){
 /* ============================================================
    Budget view
    ============================================================ */
+function budgetEvents(){
+  var ids = state.budgetBoardIds || [];
+  return sortedEvents().filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
+}
+
+function budgetAreasBarHTML(){
+  var ids = state.budgetBoardIds || [];
+  var chips = ids.map(function(id){
+    var b = boardById(id);
+    if (!b) return "";
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-100);color:var(--blue-800);border-radius:999px;padding:4px 6px 4px 12px;font-size:12.5px;font-weight:600;">' +
+      esc(b.name) +
+      '<button type="button" data-action="remove-budget-board" data-id="' + id + '" title="Remove from Budget" style="border:none;background:none;cursor:pointer;color:var(--blue-800);opacity:0.6;font-size:14px;line-height:1;padding:0 2px;">&times;</button>' +
+      '</span>';
+  }).join("");
+  var available = state.boards.filter(function(b){ return b.id !== HOLIDAYS_BOARD_ID && !b.isFolder && ids.indexOf(b.id) === -1; });
+  var addControl = available.length ?
+    '<select id="add-budget-board-select" style="font-size:12.5px;border:1px dashed var(--border);border-radius:999px;padding:4px 8px;color:var(--text-muted);background:#fff;">' +
+      '<option value="">+ Add budget area&hellip;</option>' +
+      available.map(function(b){ return '<option value="' + b.id + '">' + esc(b.name) + '</option>'; }).join("") +
+    '</select>' : '';
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Budget areas:</span>' + chips + addControl +
+  '</div>';
+}
+
 function budgetViewHTML(){
   var html = '<div class="toolbar"><h2 class="page-title">Budget</h2><div class="grow"></div>' +
     '<button class="btn btn-primary" data-action="add-event" data-date="" data-context="budget">+ New event</button>' +
@@ -1082,43 +1114,52 @@ function budgetViewHTML(){
   if (ui.budgetTab === "detail" && ui.budgetDetailId && eventById(ui.budgetDetailId)){
     html += budgetDetailHTML(eventById(ui.budgetDetailId));
   } else if (ui.budgetTab === "charts"){
-    html += budgetChartsHTML();
+    html += budgetAreasBarHTML() + budgetChartsHTML();
   } else {
     ui.budgetTab = "overview";
-    html += budgetOverviewHTML();
+    html += budgetAreasBarHTML() + budgetOverviewHTML();
   }
   return html;
 }
 
 function budgetOverviewHTML(){
-  var events = sortedEvents();
+  var events = budgetEvents();
   if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
   var grandIncome = 0, grandExpense = 0;
-  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody>';
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Board</th><th>Sub-category</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th><th></th></tr></thead><tbody>';
   events.forEach(function(e){
     var t = budgetTotals(e);
+    var board = boardById(e.boardId);
+    var sub = subcategoryById(e.boardId, e.subcategoryId);
     grandIncome += t.income; grandExpense += t.expense;
     html += '<tr>' +
       '<td><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
+      '<td>' + (board ? esc(board.name) : "&mdash;") + '</td>' +
+      '<td>' + (sub ? esc(sub.name) : "&mdash;") + '</td>' +
       '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
       '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
       '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
       '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
+      '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
       '</tr>';
   });
-  html += '</tbody><tfoot><tr><td colspan="2">Grand total</td>' +
+  html += '</tbody><tfoot><tr><td colspan="4">Grand total</td>' +
     '<td>' + fmtMoney(grandIncome) + '</td><td>' + fmtMoney(grandExpense) + '</td>' +
-    '<td style="color:' + ((grandIncome-grandExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(grandIncome-grandExpense) + '</td></tr></tfoot>';
+    '<td style="color:' + ((grandIncome-grandExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(grandIncome-grandExpense) + '</td><td></td></tr></tfoot>';
   html += '</table></div>';
   return html;
 }
 
 function budgetDetailHTML(ev){
   var t = budgetTotals(ev);
+  var board = boardById(ev.boardId);
+  var sub = subcategoryById(ev.boardId, ev.subcategoryId);
+  var subLabel = board ? esc(board.name) + (sub ? " &rsaquo; " + esc(sub.name) : "") + " &middot; " : "";
   var html = '<div class="toolbar" style="margin-bottom:14px;">' +
     '<button class="btn btn-sm" data-action="budget-tab" data-tab="overview">&larr; Overview</button>' +
-    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(ev.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + eventDateRangeLabel(ev) + '</span></h3>' +
+    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(ev.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + subLabel + eventDateRangeLabel(ev) + '</span></h3>' +
     '<div class="grow"></div>' +
+    '<button class="btn btn-danger btn-sm" data-action="delete-event" data-id="' + ev.id + '">Delete event</button>' +
     '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
   '</div>';
   html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="budget-rows-body">';
@@ -1146,7 +1187,7 @@ function budgetRowHTML(eventId, item){
 }
 
 function budgetChartsHTML(){
-  var events = sortedEvents();
+  var events = budgetEvents();
   var hasData = events.some(function(e){ return (e.budgetItems||[]).length; });
   if (!hasData) return emptyState("No budget data yet.", "Add line items to an event's budget to see charts here.");
   var html = '<div class="chart-card"><h4>Income vs. Expenses by Event</h4>' + barChartSVG(events) + '</div>';
@@ -1315,12 +1356,22 @@ function alertModal(message, title){
   openModal(html);
 }
 
+function subcategoryFieldHTML(board, selectedId){
+  var subs = (board && board.subcategories) || [];
+  if (!subs.length) return '';
+  return '<div class="field"><label>Sub-category <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label>' +
+    '<select name="subcategoryId">' +
+      '<option value="">None</option>' +
+      subs.map(function(sc){ return '<option value="' + sc.id + '" ' + (selectedId===sc.id?"selected":"") + '>' + esc(sc.name) + '</option>'; }).join("") +
+    '</select></div>';
+}
+
 function eventModalHTML(eventId, prefillDate, prefillBoard){
   var ev = eventId ? eventById(eventId) : null;
   var isNew = !ev;
-  var currentBoardId = ev ? ev.boardId : prefillBoard;
+  var selectedBoardId = ev ? ev.boardId : prefillBoard;
   var optionFor = function(b){
-    return '<option value="' + b.id + '" ' + (currentBoardId===b.id?"selected":"") + '>' + esc(b.name) + '</option>';
+    return '<option value="' + b.id + '" ' + (selectedBoardId===b.id?"selected":"") + '>' + esc(b.name) + '</option>';
   };
   var assignable = state.boards.filter(function(b){ return !b.isFolder; });
   var folders = state.boards.filter(function(b){ return b.isFolder; });
@@ -1340,6 +1391,7 @@ function eventModalHTML(eventId, prefillDate, prefillBoard){
     '<div class="modal-header"><h3>' + (isNew?"New event":"Edit event") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
       '<div class="field"><label>Board</label><select name="boardId">' + boardOptions + '</select></div>' +
+      '<div id="subcat-wrap">' + subcategoryFieldHTML(boardById(selectedBoardId), ev?ev.subcategoryId:null) + '</div>' +
       '<div class="field"><label>Title</label><input type="text" name="title" required value="' + attr(ev?ev.title:"") + '" placeholder="e.g. CS Educator Workshop 5"></div>' +
       '<div class="field-row">' +
         '<div class="field"><label>Start date</label><input type="date" name="date" required value="' + (ev?ev.date:(prefillDate||todayISO())) + '"></div>' +
@@ -1353,6 +1405,13 @@ function eventModalHTML(eventId, prefillDate, prefillBoard){
       '<button type="submit" class="btn btn-primary">' + (isNew?"Create event":"Save changes") + '</button>' +
     '</div>' +
   '</form>';
+}
+
+function subcatRowHTML(id, name){
+  return '<div class="subcat-row" data-subcat-row data-subcat-id="' + esc(id||"") + '" style="display:flex;gap:6px;margin-bottom:6px;">' +
+    '<input type="text" class="subcat-name-input" value="' + attr(name||"") + '" placeholder="e.g. Fall cohort" style="flex:1;">' +
+    '<button type="button" class="row-action" data-action="remove-subcat-row">&times;</button>' +
+    '</div>';
 }
 
 function boardModalHTML(boardId){
@@ -1375,6 +1434,12 @@ function boardModalHTML(boardId){
         swatches.map(function(c){ return '<div class="color-swatch ' + (c===selectedColor?"selected":"") + '" style="background:' + c + '" data-color="' + c + '" data-action="pick-color"></div>'; }).join("") +
       '</div>' +
       '<input type="hidden" name="color" id="color-input" value="' + selectedColor + '">' +
+      '</div>' +
+      '<div class="field"><label>Sub-categories <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label>' +
+        '<div id="subcat-rows">' +
+          ((b && b.subcategories) || []).map(function(sc){ return subcatRowHTML(sc.id, sc.name); }).join("") +
+        '</div>' +
+        '<button type="button" class="btn btn-sm" data-action="add-subcat-row">+ Add sub-category</button>' +
       '</div>' +
     '</div>' +
     '<div class="modal-footer">' +
@@ -1468,6 +1533,11 @@ var ACTIONS = {
     saveState(); render();
   },
   "add-board": function(){ openModal(boardModalHTML(null)); },
+  "remove-budget-board": function(t){
+    var id = t.getAttribute("data-id");
+    state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
+    saveState(); render();
+  },
   "edit-board": function(t){ openModal(boardModalHTML(t.getAttribute("data-id"))); },
   "add-link": function(){ openModal(linkModalHTML(null)); },
   "edit-link": function(t){ openModal(linkModalHTML(t.getAttribute("data-id"))); },
@@ -1509,6 +1579,7 @@ var ACTIONS = {
         state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
       }
       state.boards = state.boards.filter(function(bb){ return bb.id !== id; });
+      state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
       if (state.boardFilter === id) state.boardFilter = null;
       saveState(); render();
     }, { title: "Delete board?" });
@@ -1518,6 +1589,19 @@ var ACTIONS = {
     t.classList.add("selected");
     document.getElementById("color-input").value = t.getAttribute("data-color");
   },
+  "add-subcat-row": function(){
+    var wrap = document.getElementById("subcat-rows");
+    if (!wrap) return;
+    var holder = document.createElement("div");
+    holder.innerHTML = subcatRowHTML("", "");
+    var row = holder.firstChild;
+    wrap.appendChild(row);
+    row.querySelector(".subcat-name-input").focus();
+  },
+  "remove-subcat-row": function(t){
+    var row = t.closest("[data-subcat-row]");
+    if (row) row.remove();
+  },
   "submit-board-form": function(form){
     var fd = new FormData(form);
     var id = form.getAttribute("data-id");
@@ -1526,14 +1610,27 @@ var ACTIONS = {
     var isFolder = fd.get("isFolder") === "on";
     var parentId = isFolder ? null : ((fd.get("parentId")||"").toString() || null);
     if (!name) return;
+    var subcategories = [];
+    form.querySelectorAll("[data-subcat-row]").forEach(function(row){
+      var scName = row.querySelector(".subcat-name-input").value.trim();
+      if (!scName) return;
+      subcategories.push({ id: row.getAttribute("data-subcat-id") || uid(), name: scName });
+    });
     if (id){
       var b = boardById(id);
       b.name = name; b.color = color; b.isFolder = isFolder; b.parentId = parentId;
       if (isFolder){
         state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
+        state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
       }
+      var keepIds = {};
+      subcategories.forEach(function(sc){ keepIds[sc.id] = true; });
+      state.events.forEach(function(e){
+        if (e.boardId === id && e.subcategoryId && !keepIds[e.subcategoryId]) e.subcategoryId = null;
+      });
+      b.subcategories = subcategories;
     } else {
-      state.boards.push({ id: uid(), name: name, color: color, isFolder: isFolder, parentId: parentId });
+      state.boards.push({ id: uid(), name: name, color: color, isFolder: isFolder, parentId: parentId, subcategories: subcategories });
     }
     saveState(); closeModal(); render();
   },
@@ -1562,13 +1659,14 @@ var ACTIONS = {
     var endDateRaw = (fd.get("endDate")||"").toString();
     var endDate = (endDateRaw && endDateRaw > date) ? endDateRaw : null;
     var boardId = (fd.get("boardId")||"").toString() || null;
+    var subcategoryId = (fd.get("subcategoryId")||"").toString() || null;
     var notes = (fd.get("notes")||"").toString();
     if (!title || !date) return;
     if (id){
       var e = eventById(id);
-      e.title = title; e.date = date; e.endDate = endDate; e.boardId = boardId; e.notes = notes;
+      e.title = title; e.date = date; e.endDate = endDate; e.boardId = boardId; e.subcategoryId = subcategoryId; e.notes = notes;
     } else {
-      state.events.push({ id: uid(), title: title, date: date, endDate: endDate, boardId: boardId, notes: notes, attendeeIds: [], budgetItems: [] });
+      state.events.push({ id: uid(), title: title, date: date, endDate: endDate, boardId: boardId, subcategoryId: subcategoryId, notes: notes, attendeeIds: [], budgetItems: [] });
     }
     state.calendarCursor = date.slice(0, 7);
     saveState(); closeModal(); render();
@@ -1753,6 +1851,15 @@ document.addEventListener("change", function(e){
   var t = e.target;
   if (t.matches("[data-budget-field='type']")){
     // handled by input listener already firing on select change in most browsers; ensure totals update
+  } else if (t.matches("#event-form select[name='boardId']")){
+    var wrap = document.getElementById("subcat-wrap");
+    if (wrap) wrap.innerHTML = subcategoryFieldHTML(boardById(t.value), null);
+  } else if (t.matches("#add-budget-board-select")){
+    if (t.value){
+      state.budgetBoardIds = state.budgetBoardIds || [];
+      state.budgetBoardIds.push(t.value);
+      saveState(); render();
+    }
   }
   if (t.id === "board-is-folder"){
     var parentField = document.getElementById("board-parent-field");
