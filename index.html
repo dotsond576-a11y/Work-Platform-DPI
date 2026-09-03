@@ -1058,7 +1058,7 @@ function budgetOverviewHTML(){
   var events = budgetEvents();
   if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
   var grandIncome = 0, grandExpense = 0;
-  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Board</th><th>Sub-category</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody>';
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Board</th><th>Sub-category</th><th>Date</th><th>Income</th><th>Expenses</th><th>Net</th><th></th></tr></thead><tbody>';
   events.forEach(function(e){
     var t = budgetTotals(e);
     var board = boardById(e.boardId);
@@ -1072,11 +1072,12 @@ function budgetOverviewHTML(){
       '<td style="font-family:var(--font-mono);">' + fmtMoney(t.income) + '</td>' +
       '<td style="font-family:var(--font-mono);">' + fmtMoney(t.expense) + '</td>' +
       '<td style="font-family:var(--font-mono);font-weight:700;color:' + (t.net>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(t.net) + '</td>' +
+      '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
       '</tr>';
   });
   html += '</tbody><tfoot><tr><td colspan="4">Grand total</td>' +
     '<td>' + fmtMoney(grandIncome) + '</td><td>' + fmtMoney(grandExpense) + '</td>' +
-    '<td style="color:' + ((grandIncome-grandExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(grandIncome-grandExpense) + '</td></tr></tfoot>';
+    '<td style="color:' + ((grandIncome-grandExpense)>=0?"#0F8A5F":"#DC2626") + '">' + fmtMoney(grandIncome-grandExpense) + '</td><td></td></tr></tfoot>';
   html += '</table></div>';
   return html;
 }
@@ -1090,6 +1091,7 @@ function budgetDetailHTML(ev){
     '<button class="btn btn-sm" data-action="budget-tab" data-tab="overview">&larr; Overview</button>' +
     '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(ev.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + subLabel + eventDateRangeLabel(ev) + '</span></h3>' +
     '<div class="grow"></div>' +
+    '<button class="btn btn-danger btn-sm" data-action="delete-event" data-id="' + ev.id + '">Delete event</button>' +
     '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
   '</div>';
   html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th></th></tr></thead><tbody id="budget-rows-body">';
