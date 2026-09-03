@@ -414,7 +414,8 @@ function defaultState(){
     currentView: "calendar",
     calendarCursor: "2026-06",
     resourceLinks: [],
-    holidaysSeeded: false
+    holidaysSeeded: false,
+    budgetBoardIds: ["board-cs-educator", "board-summer", "board-ai-ambass"]
   };
   return seedHolidaysIfNeeded(s);
 }
@@ -1008,10 +1009,30 @@ function sessionRosterHTML(session){
 /* ============================================================
    Budget view
    ============================================================ */
-var BUDGET_BOARD_IDS = ["board-cs-educator", "board-quantum", "board-summer", "board-ai-ambass"];
-
 function budgetEvents(){
-  return sortedEvents().filter(function(e){ return BUDGET_BOARD_IDS.indexOf(e.boardId) !== -1; });
+  var ids = state.budgetBoardIds || [];
+  return sortedEvents().filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
+}
+
+function budgetAreasBarHTML(){
+  var ids = state.budgetBoardIds || [];
+  var chips = ids.map(function(id){
+    var b = boardById(id);
+    if (!b) return "";
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-100);color:var(--blue-800);border-radius:999px;padding:4px 6px 4px 12px;font-size:12.5px;font-weight:600;">' +
+      esc(b.name) +
+      '<button type="button" data-action="remove-budget-board" data-id="' + id + '" title="Remove from Budget" style="border:none;background:none;cursor:pointer;color:var(--blue-800);opacity:0.6;font-size:14px;line-height:1;padding:0 2px;">&times;</button>' +
+      '</span>';
+  }).join("");
+  var available = state.boards.filter(function(b){ return b.id !== HOLIDAYS_BOARD_ID && ids.indexOf(b.id) === -1; });
+  var addControl = available.length ?
+    '<select id="add-budget-board-select" style="font-size:12.5px;border:1px dashed var(--border);border-radius:999px;padding:4px 8px;color:var(--text-muted);background:#fff;">' +
+      '<option value="">+ Add budget area&hellip;</option>' +
+      available.map(function(b){ return '<option value="' + b.id + '">' + esc(b.name) + '</option>'; }).join("") +
+    '</select>' : '';
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Budget areas:</span>' + chips + addControl +
+  '</div>';
 }
 
 function budgetViewHTML(){
@@ -1025,10 +1046,10 @@ function budgetViewHTML(){
   if (ui.budgetTab === "detail" && ui.budgetDetailId && eventById(ui.budgetDetailId)){
     html += budgetDetailHTML(eventById(ui.budgetDetailId));
   } else if (ui.budgetTab === "charts"){
-    html += budgetChartsHTML();
+    html += budgetAreasBarHTML() + budgetChartsHTML();
   } else {
     ui.budgetTab = "overview";
-    html += budgetOverviewHTML();
+    html += budgetAreasBarHTML() + budgetOverviewHTML();
   }
   return html;
 }
@@ -1421,6 +1442,11 @@ var ACTIONS = {
     saveState(); render();
   },
   "add-board": function(){ openModal(boardModalHTML(null)); },
+  "remove-budget-board": function(t){
+    var id = t.getAttribute("data-id");
+    state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
+    saveState(); render();
+  },
   "edit-board": function(t){ openModal(boardModalHTML(t.getAttribute("data-id"))); },
   "add-link": function(){ openModal(linkModalHTML(null)); },
   "edit-link": function(t){ openModal(linkModalHTML(t.getAttribute("data-id"))); },
@@ -1722,6 +1748,12 @@ document.addEventListener("change", function(e){
   } else if (t.matches("#event-form select[name='boardId']")){
     var wrap = document.getElementById("subcat-wrap");
     if (wrap) wrap.innerHTML = subcategoryFieldHTML(boardById(t.value), null);
+  } else if (t.matches("#add-budget-board-select")){
+    if (t.value){
+      state.budgetBoardIds = state.budgetBoardIds || [];
+      state.budgetBoardIds.push(t.value);
+      saveState(); render();
+    }
   }
 });
 
