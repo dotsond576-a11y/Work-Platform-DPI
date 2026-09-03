@@ -141,6 +141,9 @@ main#main-content{flex:1;overflow-y:auto;padding:22px 26px;min-width:0;display:f
 .board-row.active{background:var(--blue-800);color:#fff;}
 .board-row.active .board-count{color:rgba(255,255,255,0.7);}
 .board-row.active .board-actions button{color:rgba(255,255,255,0.75);}
+.board-row.folder{font-weight:800;}
+.board-row.folder .color-dot{border-radius:4px;}
+.board-row.nested{margin-left:20px;}
 .color-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,0.08);}
 .board-name{flex:1;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .board-count{font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);}
@@ -260,6 +263,10 @@ label{font-size:12.5px;font-weight:600;color:var(--text-muted);display:block;mar
 
 /* ========================= Board (kanban) ========================= */
 .board-columns{display:flex;gap:16px;align-items:flex-start;overflow-x:auto;padding-bottom:12px;}
+.kanban-group{display:flex;flex-direction:column;gap:8px;padding:10px;border:1.5px dashed #C7CEDB;border-radius:14px;background:rgba(19,41,75,0.02);flex-shrink:0;}
+.kanban-group-label{font-family:var(--font-heading);font-weight:800;font-size:13px;display:flex;align-items:center;gap:8px;padding:0 4px;}
+.kanban-group-cols{display:flex;gap:16px;align-items:flex-start;}
+.kanban-group .color-dot{border-radius:4px;}
 .kanban-col{
   background:#EEF1F7;border-radius:var(--radius);width:270px;flex-shrink:0;padding:12px;min-height:120px;
 }
@@ -551,10 +558,20 @@ function sortedParticipants(list){
   });
 }
 function sortedEvents(){ return state.events.slice().sort(function(a,b){ return (a.date || "").localeCompare(b.date || ""); }); }
+function boardIdsForFilter(filterId){
+  var b = boardById(filterId);
+  if (b && b.isFolder){
+    return state.boards.filter(function(x){ return !x.isFolder && x.parentId === filterId; }).map(function(x){ return x.id; });
+  }
+  return [filterId];
+}
 function visibleEvents(){
   var list = sortedEvents();
   if (state.boardFilter === "uncategorized") return list.filter(function(e){ return !e.boardId || !boardById(e.boardId); });
-  if (state.boardFilter) return list.filter(function(e){ return e.boardId === state.boardFilter; });
+  if (state.boardFilter){
+    var ids = boardIdsForFilter(state.boardFilter);
+    return list.filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
+  }
   return list;
 }
 function budgetTotals(ev){
@@ -611,6 +628,40 @@ function renderHeader(){
     '</div>';
 }
 
+function boardEventCount(boardId){
+  return state.events.filter(function(e){ return e.boardId === boardId; }).length;
+}
+
+function organizeBoardsForDisplay(){
+  var folderIds = {};
+  state.boards.forEach(function(b){ if (b.isFolder) folderIds[b.id] = true; });
+  var childrenByParent = {};
+  state.boards.forEach(function(b){
+    if (!b.isFolder && b.parentId && folderIds[b.parentId]){
+      (childrenByParent[b.parentId] = childrenByParent[b.parentId] || []).push(b);
+    }
+  });
+  var topLevel = state.boards.filter(function(b){
+    return b.isFolder || !b.parentId || !folderIds[b.parentId];
+  });
+  return topLevel.map(function(b){
+    return { board: b, children: b.isFolder ? (childrenByParent[b.id] || []) : [] };
+  });
+}
+
+function boardRowHTML(b, nested){
+  var count = b.isFolder ? b.children_count : boardEventCount(b.id);
+  return '<div class="board-row ' + (nested?"nested":"") + ' ' + (b.isFolder?"folder":"") + ' ' + (state.boardFilter===b.id?"active":"") + '" data-action="board-filter" data-board="' + b.id + '">' +
+            '<span class="color-dot" style="background:' + b.color + '"></span>' +
+            '<span class="board-name">' + esc(b.name) + '</span>' +
+            '<span class="board-count">' + count + '</span>' +
+            '<span class="board-actions">' +
+              '<button data-action="edit-board" data-id="' + b.id + '" title="Edit">&#9998;</button>' +
+              '<button data-action="delete-board" data-id="' + b.id + '" title="Delete">&times;</button>' +
+            '</span>' +
+          '</div>';
+}
+
 function renderSidebar(){
   var el = document.getElementById("sidebar");
   var uncategorizedCount = state.events.filter(function(e){ return !e.boardId || !boardById(e.boardId); }).length;
@@ -621,17 +672,12 @@ function renderSidebar(){
             '<span class="board-name">All events</span>' +
             '<span class="board-count">' + state.events.length + '</span>' +
           '</div>';
-  state.boards.forEach(function(b){
-    var count = state.events.filter(function(e){ return e.boardId === b.id; }).length;
-    html += '<div class="board-row ' + (state.boardFilter===b.id?"active":"") + '" data-action="board-filter" data-board="' + b.id + '">' +
-              '<span class="color-dot" style="background:' + b.color + '"></span>' +
-              '<span class="board-name">' + esc(b.name) + '</span>' +
-              '<span class="board-count">' + count + '</span>' +
-              '<span class="board-actions">' +
-                '<button data-action="edit-board" data-id="' + b.id + '" title="Edit">&#9998;</button>' +
-                '<button data-action="delete-board" data-id="' + b.id + '" title="Delete">&times;</button>' +
-              '</span>' +
-            '</div>';
+  organizeBoardsForDisplay().forEach(function(item){
+    if (item.board.isFolder){
+      item.board.children_count = item.children.reduce(function(sum, c){ return sum + boardEventCount(c.id); }, 0);
+    }
+    html += boardRowHTML(item.board, false);
+    item.children.forEach(function(c){ html += boardRowHTML(c, true); });
   });
   if (uncategorizedCount > 0){
     html += '<div class="board-row ' + (state.boardFilter==="uncategorized"?"active":"") + '" data-action="board-filter" data-board="uncategorized">' +
@@ -772,16 +818,38 @@ function listViewHTML(){
    Board (kanban) view
    ============================================================ */
 function boardViewHTML(){
-  var cols = state.boards.slice();
+  var organized = organizeBoardsForDisplay();
   if (state.boardFilter && state.boardFilter !== "uncategorized"){
-    cols = cols.filter(function(b){ return b.id === state.boardFilter; });
+    var filterBoard = boardById(state.boardFilter);
+    if (filterBoard && filterBoard.isFolder){
+      organized = organized.filter(function(item){ return item.board.id === state.boardFilter; });
+    } else {
+      var found = null;
+      organized.forEach(function(item){
+        if (item.board.id === state.boardFilter) found = { board: item.board, children: [] };
+        item.children.forEach(function(c){ if (c.id === state.boardFilter) found = { board: c, children: [] }; });
+      });
+      organized = found ? [found] : [];
+    }
   }
   var showUncategorized = !state.boardFilter || state.boardFilter === "uncategorized";
   var html = '<div class="toolbar"><h2 class="page-title">Board</h2><div class="grow"></div><button class="btn btn-primary" data-action="add-event" data-date="">+ New event</button></div>';
   html += '<div class="board-columns">';
-  cols.forEach(function(b){
-    var events = sortedEvents().filter(function(e){ return e.boardId === b.id; });
-    html += kanbanColumnHTML(b.id, b.name, b.color, events);
+  organized.forEach(function(item){
+    if (item.board.isFolder){
+      if (!item.children.length) return;
+      html += '<div class="kanban-group">';
+      html += '<div class="kanban-group-label"><span class="color-dot" style="background:' + item.board.color + '"></span>' + esc(item.board.name) + '</div>';
+      html += '<div class="kanban-group-cols">';
+      item.children.forEach(function(c){
+        var events = sortedEvents().filter(function(e){ return e.boardId === c.id; });
+        html += kanbanColumnHTML(c.id, c.name, c.color, events);
+      });
+      html += '</div></div>';
+    } else {
+      var events = sortedEvents().filter(function(e){ return e.boardId === item.board.id; });
+      html += kanbanColumnHTML(item.board.id, item.board.name, item.board.color, events);
+    }
   });
   if (showUncategorized){
     var uncEvents = sortedEvents().filter(function(e){ return !e.boardId || !boardById(e.boardId); });
@@ -1199,7 +1267,7 @@ function normalizeUrl(u){
 function linkModalHTML(linkId){
   var link = linkId ? state.resourceLinks.find(function(l){ return l.id === linkId; }) : null;
   var isNew = !link;
-  return '<form id="link-form" data-action="submit-link-form" data-id="' + (link?link.id:"") + '">' +
+  return '<form id="link-form" data-submit-action="submit-link-form" data-id="' + (link?link.id:"") + '">' +
     '<div class="modal-header"><h3>' + (isNew?"Add link":"Edit link") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
       '<div class="field"><label>Title</label><input type="text" name="title" required value="' + attr(link?link.title:"") + '" placeholder="e.g. October Budget Meeting Agenda"></div>' +
@@ -1250,10 +1318,25 @@ function alertModal(message, title){
 function eventModalHTML(eventId, prefillDate, prefillBoard){
   var ev = eventId ? eventById(eventId) : null;
   var isNew = !ev;
-  var boardOptions = '<option value="">Uncategorized</option>' + state.boards.map(function(b){
-    return '<option value="' + b.id + '" ' + ((ev?ev.boardId:prefillBoard)===b.id?"selected":"") + '>' + esc(b.name) + '</option>';
-  }).join("");
-  return '<form id="event-form" data-action="submit-event-form" data-id="' + (ev?ev.id:"") + '">' +
+  var currentBoardId = ev ? ev.boardId : prefillBoard;
+  var optionFor = function(b){
+    return '<option value="' + b.id + '" ' + (currentBoardId===b.id?"selected":"") + '>' + esc(b.name) + '</option>';
+  };
+  var assignable = state.boards.filter(function(b){ return !b.isFolder; });
+  var folders = state.boards.filter(function(b){ return b.isFolder; });
+  var boardOptions = '<option value="">Uncategorized</option>';
+  assignable.filter(function(b){
+    var parent = b.parentId ? boardById(b.parentId) : null;
+    return !parent || !parent.isFolder;
+  }).forEach(function(b){ boardOptions += optionFor(b); });
+  folders.forEach(function(folder){
+    var children = assignable.filter(function(b){ return b.parentId === folder.id; });
+    if (!children.length) return;
+    boardOptions += '<optgroup label="' + attr(folder.name) + '">';
+    children.forEach(function(b){ boardOptions += optionFor(b); });
+    boardOptions += '</optgroup>';
+  });
+  return '<form id="event-form" data-submit-action="submit-event-form" data-id="' + (ev?ev.id:"") + '">' +
     '<div class="modal-header"><h3>' + (isNew?"New event":"Edit event") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
       '<div class="field"><label>Board</label><select name="boardId">' + boardOptions + '</select></div>' +
@@ -1275,12 +1358,19 @@ function eventModalHTML(eventId, prefillDate, prefillBoard){
 function boardModalHTML(boardId){
   var b = boardId ? boardById(boardId) : null;
   var isNew = !b;
+  var isFolder = b ? !!b.isFolder : false;
   var swatches = CATEGORY_PALETTE.concat(["#F5A576","#94A3B8","#0F8A5F","#F59E0B"]);
   var selectedColor = b ? b.color : swatches[0];
-  var html = '<form id="board-form" data-action="submit-board-form" data-id="' + (b?b.id:"") + '">' +
+  var folderOptions = state.boards.filter(function(x){ return x.isFolder && (!b || x.id !== b.id); });
+  var parentSelectHTML = '<option value="">No parent (top-level)</option>' + folderOptions.map(function(f){
+    return '<option value="' + f.id + '" ' + ((b && b.parentId === f.id) ? "selected" : "") + '>' + esc(f.name) + '</option>';
+  }).join("");
+  var html = '<form id="board-form" data-submit-action="submit-board-form" data-id="' + (b?b.id:"") + '">' +
     '<div class="modal-header"><h3>' + (isNew?"Add board":"Edit board") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
       '<div class="field"><label>Name</label><input type="text" name="name" required value="' + attr(b?b.name:"") + '" placeholder="e.g. Regional Meetups"></div>' +
+      '<div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:var(--text);"><input type="checkbox" name="isFolder" id="board-is-folder" ' + (isFolder?"checked":"") + ' style="width:auto;">This is a group that holds other boards, not events directly</label></div>' +
+      '<div class="field" id="board-parent-field"' + (isFolder?' hidden':'') + '><label>Parent group <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label><select name="parentId">' + parentSelectHTML + '</select></div>' +
       '<div class="field"><label>Color</label><div class="color-palette" id="color-palette">' +
         swatches.map(function(c){ return '<div class="color-swatch ' + (c===selectedColor?"selected":"") + '" style="background:' + c + '" data-color="' + c + '" data-action="pick-color"></div>'; }).join("") +
       '</div>' +
@@ -1297,7 +1387,7 @@ function boardModalHTML(boardId){
 
 function attendeeModalHTML(sessionId){
   var isEnroll = !!sessionId;
-  return '<form id="attendee-form" data-action="submit-new-attendee" data-event="' + (sessionId||"") + '">' +
+  return '<form id="attendee-form" data-submit-action="submit-new-attendee" data-event="' + (sessionId||"") + '">' +
     '<div class="modal-header"><h3>' + (isEnroll ? "Add attendee" : "Add participant") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
       '<div class="field-row">' +
@@ -1338,7 +1428,7 @@ function existingAttendeeModalHTML(sessionId){
 }
 
 function addFieldModalHTML(){
-  return '<form id="field-form" data-action="submit-add-field">' +
+  return '<form id="field-form" data-submit-action="submit-add-field">' +
     '<div class="modal-header"><h3>Add info field</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
     '<div class="modal-body">' +
       '<div class="field"><label>Field name</label><input type="text" name="fieldName" required placeholder="e.g. T-shirt size"></div>' +
@@ -1409,8 +1499,15 @@ var ACTIONS = {
     var id = t.getAttribute("data-id");
     var b = boardById(id);
     if (!b) return;
-    confirmModal('Delete "' + b.name + '"? Events on this board will become uncategorized (not deleted).', function(){
-      state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
+    var msg = b.isFolder
+      ? 'Delete "' + b.name + '"? Its sub-boards will become top-level boards (not deleted).'
+      : 'Delete "' + b.name + '"? Events on this board will become uncategorized (not deleted).';
+    confirmModal(msg, function(){
+      if (b.isFolder){
+        state.boards.forEach(function(bb){ if (bb.parentId === id) bb.parentId = null; });
+      } else {
+        state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
+      }
       state.boards = state.boards.filter(function(bb){ return bb.id !== id; });
       if (state.boardFilter === id) state.boardFilter = null;
       saveState(); render();
@@ -1426,12 +1523,17 @@ var ACTIONS = {
     var id = form.getAttribute("data-id");
     var name = (fd.get("name")||"").toString().trim();
     var color = (fd.get("color")||"#13294B").toString();
+    var isFolder = fd.get("isFolder") === "on";
+    var parentId = isFolder ? null : ((fd.get("parentId")||"").toString() || null);
     if (!name) return;
     if (id){
       var b = boardById(id);
-      b.name = name; b.color = color;
+      b.name = name; b.color = color; b.isFolder = isFolder; b.parentId = parentId;
+      if (isFolder){
+        state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
+      }
     } else {
-      state.boards.push({ id: uid(), name: name, color: color });
+      state.boards.push({ id: uid(), name: name, color: color, isFolder: isFolder, parentId: parentId });
     }
     saveState(); closeModal(); render();
   },
@@ -1447,7 +1549,8 @@ var ACTIONS = {
 
   "add-event": function(t){
     var date = t.getAttribute("data-date") || todayISO();
-    var boardId = t.getAttribute("data-board") || (state.boardFilter && state.boardFilter !== "uncategorized" ? state.boardFilter : "");
+    var filterBoard = state.boardFilter && state.boardFilter !== "uncategorized" ? boardById(state.boardFilter) : null;
+    var boardId = t.getAttribute("data-board") || ((filterBoard && !filterBoard.isFolder) ? filterBoard.id : "");
     openModal(eventModalHTML(null, date, boardId));
   },
   "edit-event": function(t){ openModal(eventModalHTML(t.getAttribute("data-id"))); },
@@ -1608,10 +1711,10 @@ document.addEventListener("click", function(e){
 });
 
 document.addEventListener("submit", function(e){
-  var form = e.target.closest("form[data-action]");
+  var form = e.target.closest("form[data-submit-action]");
   if (!form) return;
   e.preventDefault();
-  var action = form.getAttribute("data-action");
+  var action = form.getAttribute("data-submit-action");
   runAction(action, form);
 });
 
@@ -1650,6 +1753,10 @@ document.addEventListener("change", function(e){
   var t = e.target;
   if (t.matches("[data-budget-field='type']")){
     // handled by input listener already firing on select change in most browsers; ensure totals update
+  }
+  if (t.id === "board-is-folder"){
+    var parentField = document.getElementById("board-parent-field");
+    if (parentField) parentField.hidden = t.checked;
   }
 });
 
