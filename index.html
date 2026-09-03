@@ -429,7 +429,8 @@ function defaultState(){
     calendarCursor: "2026-06",
     resourceLinks: [],
     holidaysSeeded: false,
-    budgetBoardIds: ["board-cs-educator", "board-summer", "board-ai-ambass"]
+    budgetBoardIds: ["board-cs-educator", "board-summer", "board-ai-ambass"],
+    attendanceBoardIds: ["board-cs-educator", "board-ai-ambass", "board-summer"]
   };
   return seedHolidaysIfNeeded(s);
 }
@@ -934,10 +935,11 @@ function emptyState(title, sub){
 /* ============================================================
    Attendance view
    ============================================================ */
-var ATTENDANCE_BOARD_IDS = ["board-cs-educator", "board-ai-ambass", "board-summer"];
+function attendanceBoardIds(){ return state.attendanceBoardIds || []; }
 
 function attendanceViewHTML(){
-  var sessions = sortedEvents().filter(function(e){ return ATTENDANCE_BOARD_IDS.indexOf(e.boardId) !== -1; });
+  var ids = attendanceBoardIds();
+  var sessions = sortedEvents().filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
   var html = '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
     '<button class="btn" data-action="add-field">+ Add info field</button>' +
     '<button class="btn" data-action="download-template">Download template</button>' +
@@ -946,6 +948,7 @@ function attendanceViewHTML(){
     '<button class="btn btn-secondary" data-action="import-file">Import spreadsheet</button>' +
     (ui.attendanceSession === "directory" ? '<button class="btn btn-primary" data-action="add-participant">+ Add participant</button>' : '') +
   '</div>';
+  html += attendanceAreasBarHTML();
   html += '<div class="two-col">';
   html += '<div class="side-list">';
   html += '<div class="side-list-item ' + (ui.attendanceSession==="directory"?"active":"") + '" data-action="attendance-select" data-id="directory">All Participants <span class="sub">' + state.participants.length + '</span></div>';
@@ -960,12 +963,33 @@ function attendanceViewHTML(){
     html += directoryTableHTML();
   } else {
     var session = eventById(ui.attendanceSession);
-    if (!session || ATTENDANCE_BOARD_IDS.indexOf(session.boardId) === -1){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
+    if (!session || ids.indexOf(session.boardId) === -1){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
     else html += sessionRosterHTML(session);
   }
   html += '</div>';
   html += '</div>';
   return html;
+}
+
+function attendanceAreasBarHTML(){
+  var ids = attendanceBoardIds();
+  var chips = ids.map(function(id){
+    var b = boardById(id);
+    if (!b) return "";
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-100);color:var(--blue-800);border-radius:999px;padding:4px 6px 4px 12px;font-size:12.5px;font-weight:600;">' +
+      esc(b.name) +
+      '<button type="button" data-action="remove-attendance-board" data-id="' + id + '" title="Remove from Attendance" style="border:none;background:none;cursor:pointer;color:var(--blue-800);opacity:0.6;font-size:14px;line-height:1;padding:0 2px;">&times;</button>' +
+      '</span>';
+  }).join("");
+  var available = state.boards.filter(function(b){ return b.id !== HOLIDAYS_BOARD_ID && !b.isFolder && ids.indexOf(b.id) === -1; });
+  var addControl = available.length ?
+    '<select id="add-attendance-board-select" style="font-size:12.5px;border:1px dashed var(--border);border-radius:999px;padding:4px 8px;color:var(--text-muted);background:#fff;">' +
+      '<option value="">+ Add event board&hellip;</option>' +
+      available.map(function(b){ return '<option value="' + b.id + '">' + esc(b.name) + '</option>'; }).join("") +
+    '</select>' : '';
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Tracking attendance for:</span>' + chips + addControl +
+  '</div>';
 }
 
 function tableHeaderCells(){
@@ -1068,7 +1092,6 @@ function sessionRosterHTML(session){
   var html = '<div class="toolbar" style="margin-bottom:14px;">' +
     '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(session.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + eventDateRangeLabel(session) + '</span></h3>' +
     '<div class="grow"></div>' +
-    '<button class="btn btn-sm" data-action="export-session-attendance" data-id="' + session.id + '">Download attendance</button>' +
     '<button class="btn btn-sm" data-action="add-existing-attendee" data-id="' + session.id + '">+ Add existing</button>' +
     '<button class="btn btn-sm btn-primary" data-action="add-new-attendee" data-id="' + session.id + '">+ Add attendee</button>' +
   '</div>';
@@ -1603,6 +1626,7 @@ var ACTIONS = {
       }
       state.boards = state.boards.filter(function(bb){ return bb.id !== id; });
       state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
+      state.attendanceBoardIds = (state.attendanceBoardIds || []).filter(function(bid){ return bid !== id; });
       if (state.boardFilter === id) state.boardFilter = null;
       saveState(); render();
     }, { title: "Delete board?" });
@@ -1645,6 +1669,7 @@ var ACTIONS = {
       if (isFolder){
         state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
         state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
+        state.attendanceBoardIds = (state.attendanceBoardIds || []).filter(function(bid){ return bid !== id; });
       }
       var keepIds = {};
       subcategories.forEach(function(sc){ keepIds[sc.id] = true; });
@@ -1780,11 +1805,14 @@ var ACTIONS = {
   },
   "download-template": function(){ downloadTemplate(); },
   "export-participants": function(){ exportParticipantsCSV(); },
-  "export-session-attendance": function(t){
-    var session = eventById(t.getAttribute("data-id"));
-    if (session) exportSessionAttendanceCSV(session);
-  },
   "export-all-attendance": function(){ exportAllAttendanceCSV(); },
+  "remove-attendance-board": function(t){
+    var id = t.getAttribute("data-id");
+    state.attendanceBoardIds = (state.attendanceBoardIds || []).filter(function(bid){ return bid !== id; });
+    var currentSession = ui.attendanceSession !== "directory" ? eventById(ui.attendanceSession) : null;
+    if (currentSession && currentSession.boardId === id) ui.attendanceSession = "directory";
+    saveState(); render();
+  },
   "import-file": function(){
     var input = document.getElementById("file-import-input");
     input.value = "";
@@ -1890,6 +1918,12 @@ document.addEventListener("change", function(e){
     if (t.value){
       state.budgetBoardIds = state.budgetBoardIds || [];
       state.budgetBoardIds.push(t.value);
+      saveState(); render();
+    }
+  } else if (t.matches("#add-attendance-board-select")){
+    if (t.value){
+      state.attendanceBoardIds = state.attendanceBoardIds || [];
+      state.attendanceBoardIds.push(t.value);
       saveState(); render();
     }
   }
@@ -2074,10 +2108,6 @@ function downloadCSVRows(rows, filename){
   URL.revokeObjectURL(url);
 }
 
-function slugify(s){
-  return String(s||"").trim().replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase() || "session";
-}
-
 function sessionAttendanceRows(session){
   var attendees = sortedParticipants((session.attendeeIds || []).map(participantById).filter(Boolean));
   return attendees.map(function(p){
@@ -2087,15 +2117,9 @@ function sessionAttendanceRows(session){
   });
 }
 
-function exportSessionAttendanceCSV(session){
-  var headers = ["Session","Date","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
-  var rows = [headers].concat(sessionAttendanceRows(session));
-  downloadCSVRows(rows, "attendance_" + slugify(session.title) + ".csv");
-}
-
 function exportAllAttendanceCSV(){
   var headers = ["Session","Date","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
-  var sessions = sortedEvents().filter(function(e){ return ATTENDANCE_BOARD_IDS.indexOf(e.boardId) !== -1; });
+  var sessions = sortedEvents().filter(function(e){ return attendanceBoardIds().indexOf(e.boardId) !== -1; });
   var rows = [headers];
   sessions.forEach(function(session){
     rows = rows.concat(sessionAttendanceRows(session));
