@@ -358,8 +358,8 @@ var DEFAULT_BOARDS = [
   { id: "board-newsletters",  name: "Newsletters",                 color: "#E84A27" },
   { id: "board-conferences",  name: "Conferences",                 color: "#2E5A88" },
   { id: "board-summer",       name: "Summer Intensives",           color: "#F1793F", subcategories: [
-    { id: "subcat-si-26", name: "SI 26" },
-    { id: "subcat-si-tentative-27", name: "SI Tentative 27" }
+    { id: "subcat-si-26", name: "Summer Intensives 26" },
+    { id: "subcat-si-tentative-27", name: "Summer Intensives 27" }
   ] },
   { id: "board-quantum",      name: "Quantum Workshops",           color: "#6B8CB8" },
   { id: "board-ai-ambass",    name: "AI Ambassadors",              color: "#F5A671" }
@@ -406,6 +406,17 @@ function seedHolidaysIfNeeded(s){
   return s;
 }
 
+function renameLegacySummerSubcategories(s){
+  var board = s.boards.find(function(b){ return b.id === "board-summer"; });
+  if (board && board.subcategories){
+    board.subcategories.forEach(function(sc){
+      if (sc.name === "SI 26") sc.name = "Summer Intensives 26";
+      else if (sc.name === "SI Tentative 27") sc.name = "Summer Intensives 27";
+    });
+  }
+  return s;
+}
+
 function seedSummerSubcategoriesIfNeeded(s){
   if (s.summerSubcatsSeeded) return s;
   var board = s.boards.find(function(b){ return b.id === "board-summer"; });
@@ -413,8 +424,8 @@ function seedSummerSubcategoriesIfNeeded(s){
     board.subcategories = board.subcategories || [];
     var hasName = {};
     board.subcategories.forEach(function(sc){ hasName[sc.name] = true; });
-    if (!hasName["SI 26"]) board.subcategories.push({ id: uid(), name: "SI 26" });
-    if (!hasName["SI Tentative 27"]) board.subcategories.push({ id: uid(), name: "SI Tentative 27" });
+    if (!hasName["Summer Intensives 26"]) board.subcategories.push({ id: uid(), name: "Summer Intensives 26" });
+    if (!hasName["Summer Intensives 27"]) board.subcategories.push({ id: uid(), name: "Summer Intensives 27" });
   }
   s.summerSubcatsSeeded = true;
   return s;
@@ -512,6 +523,7 @@ function loadState(){
   }
   seedHolidaysIfNeeded(s);
   seedSummerSubcategoriesIfNeeded(s);
+  renameLegacySummerSubcategories(s);
   return s;
 }
 
