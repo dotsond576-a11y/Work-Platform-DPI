@@ -364,10 +364,33 @@ td.budget-indent{padding-left:24px;}
 
 @media (max-width: 1100px){ .upcoming-panel{display:none !important;} }
 @media (max-width: 780px){ .sidebar{display:none !important;} .two-col{flex-direction:column;} .side-list{width:100%;} }
+
+/* ========================= Auth gate ========================= */
+.auth-gate{
+  position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(120deg, var(--blue-900) 0%, var(--blue-800) 55%, var(--blue-700) 100%);
+  padding:20px;
+}
+.auth-card{
+  background:#fff;border-radius:16px;box-shadow:var(--shadow-md);padding:36px 32px;
+  max-width:360px;width:100%;text-align:center;
+}
+.auth-card .brand-mark{width:46px;height:46px;font-size:18px;margin:0 auto 18px;}
+.auth-message{color:var(--text-muted);font-size:13.5px;line-height:1.5;margin:0 0 22px;}
+.auth-card .btn{width:100%;margin-bottom:8px;}
+.auth-user-badge{font-size:12.5px;color:rgba(255,255,255,0.75);}
 </style>
 </head>
 <body>
-<div id="app">
+<div id="auth-gate" class="auth-gate">
+  <div class="auth-card">
+    <div class="brand-mark">DPI</div>
+    <p id="auth-message" class="auth-message">Sign in with your Google account to access the shared calendar.</p>
+    <button id="auth-signin-btn" class="btn btn-primary" type="button">Sign in with Google</button>
+    <button id="auth-signout-btn" class="btn" type="button" style="display:none;">Sign out</button>
+  </div>
+</div>
+<div id="app" style="display:none;">
   <header class="app-header" id="app-header"></header>
   <div class="layout">
     <aside class="sidebar" id="sidebar"></aside>
@@ -383,15 +406,52 @@ td.budget-indent{padding-left:24px;}
 <input type="file" id="mailinglist-import-input" accept=".csv,.xlsx,.xls" style="display:none;">
 <input type="file" id="backup-import-input" accept=".json" style="display:none;">
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+
 <script>
 (function(){
 "use strict";
 
 /* ============================================================
+   Firebase (shared cloud storage) setup
+   See SETUP.md for how to create these values and the matching
+   Firestore security rules.
+   ============================================================ */
+var FIREBASE_CONFIG = {
+  apiKey: "REPLACE_WITH_YOUR_API_KEY",
+  authDomain: "REPLACE_WITH_YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
+  storageBucket: "REPLACE_WITH_YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
+  appId: "REPLACE_WITH_YOUR_APP_ID"
+};
+
+// The Google account emails allowed to sign in. This list only controls
+// what the UI shows - actual enforcement lives in the Firestore security
+// rules (see SETUP.md), which must list the same addresses.
+var ALLOWED_EMAILS = [
+  "person1@example.com",
+  "person2@example.com",
+  "person3@example.com",
+  "person4@example.com"
+];
+
+var FIRESTORE_COLLECTION = "dpiCalendar";
+var FIRESTORE_DOC_ID = "sharedState";
+
+var firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+var auth = firebase.auth();
+var db = firebase.firestore();
+var stateDocRef = db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
+var remoteUnsubscribe = null;
+var applyingRemoteUpdate = false;
+var currentUserEmail = "";
+
+/* ============================================================
    Constants & defaults
    ============================================================ */
-var STORAGE_KEY = "dpiTeacherCalendarState_v1";
-
 var HOLIDAYS_BOARD_ID = "board-holidays";
 
 var DEFAULT_BOARDS = [
@@ -515,15 +575,7 @@ function migrateParticipant(p){
   return p;
 }
 
-function loadState(){
-  var loaded = null;
-  try{
-    var raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) loaded = JSON.parse(raw);
-  }catch(err){
-    console.error("Could not read saved data, falling back to defaults.", err);
-    loaded = null;
-  }
+function buildState(loaded){
   var s = ensureDefaults(loaded);
   s.participants.forEach(migrateParticipant);
   if (loaded && loaded.holidaysSeeded === undefined){
@@ -539,19 +591,22 @@ function loadState(){
 
 var saveTimer = null;
 function saveState(){
+  if (applyingRemoteUpdate) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(function(){ persist(state, 0); }, 150);
+  saveTimer = setTimeout(function(){ persist(state, 0); }, 400);
 }
 function persist(data, attempt){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  }catch(err){
+  // Firestore rejects `undefined` field values (unlike JSON.stringify,
+  // which just drops them); round-trip through JSON to strip any out.
+  var clean = JSON.parse(JSON.stringify(data));
+  stateDocRef.set(clean).catch(function(err){
     if (attempt < 3){
-      setTimeout(function(){ persist(data, attempt + 1); }, 200 * Math.pow(2, attempt));
+      setTimeout(function(){ persist(data, attempt + 1); }, 500 * Math.pow(2, attempt));
     } else {
-      console.error("Failed to save data after multiple attempts.", err);
+      console.error("Failed to save data to the shared calendar after multiple attempts.", err);
+      alertModal("Your last change couldn't be saved to the shared calendar. Check your internet connection, then try the change again.", "Save failed");
     }
-  }
+  });
 }
 
 /* ============================================================
@@ -656,7 +711,7 @@ function budgetTotals(ev){
 /* ============================================================
    State + UI (transient nav state, not persisted)
    ============================================================ */
-var state = loadState();
+var state = buildState(null);
 var ui = {
   attendanceSession: "directory",
   budgetTab: "overview",
@@ -696,6 +751,8 @@ function renderHeader(){
     '</div>' +
     '<div class="header-spacer"></div>' +
     '<div class="header-actions">' +
+      '<span class="auth-user-badge">' + esc(currentUserEmail) + '</span>' +
+      '<button class="btn-reset" data-action="sign-out" title="Sign out">Sign out</button>' +
       '<button class="btn-reset" data-action="export-backup" title="Download everything as a JSON file">Export backup</button>' +
       '<button class="btn-reset" data-action="import-backup" title="Restore from a previously exported JSON file">Import backup</button>' +
     '</div>';
@@ -1796,6 +1853,10 @@ var ACTIONS = {
     }, { title: "Reset all data?", confirmLabel: "Reset everything" });
   },
   "export-backup": function(){ downloadBackupJSON(); },
+  "sign-out": function(){
+    if (remoteUnsubscribe){ remoteUnsubscribe(); remoteUnsubscribe = null; }
+    auth.signOut();
+  },
   "import-backup": function(){
     var input = document.getElementById("backup-import-input");
     input.value = "";
@@ -2590,26 +2651,80 @@ document.getElementById("backup-import-input").addEventListener("change", functi
 });
 
 /* ============================================================
-   Init
+   Auth gate + cloud sync
    ============================================================ */
-function storageAvailable(){
-  try{
-    var testKey = "__dpi_storage_test__";
-    localStorage.setItem(testKey, "1");
-    localStorage.removeItem(testKey);
-    return true;
-  }catch(err){
-    return false;
-  }
+function showAuthGate(message, showSignOut){
+  document.getElementById("app").style.display = "none";
+  document.getElementById("auth-gate").style.display = "flex";
+  document.getElementById("auth-message").textContent = message;
+  document.getElementById("auth-signin-btn").style.display = showSignOut ? "none" : "";
+  document.getElementById("auth-signout-btn").style.display = showSignOut ? "" : "none";
 }
 
-render();
-if (!storageAvailable()){
-  alertModal(
-    "This browser tab or preview is blocking local storage, so anything you add or edit will be lost as soon as you reload or close this page. Try opening this file directly in a normal browser tab (not an embedded preview, iframe, or private/incognito window) to fix this.",
-    "Changes won't be saved here"
-  );
+function hideAuthGate(){
+  document.getElementById("auth-gate").style.display = "none";
+  document.getElementById("app").style.display = "";
 }
+
+function startCloudSync(){
+  showAuthGate("Loading the shared calendar…", false);
+  stateDocRef.get().then(function(snap){
+    if (snap.exists){
+      state = buildState(snap.data());
+    } else {
+      state = buildState(null);
+      persist(state, 0);
+    }
+    hideAuthGate();
+    render();
+    listenForRemoteUpdates();
+  }).catch(function(err){
+    console.error("Could not load the shared calendar.", err);
+    showAuthGate("Couldn't load the shared calendar (" + err.message + "). Check your internet connection and reload the page.", true);
+  });
+}
+
+function listenForRemoteUpdates(){
+  remoteUnsubscribe = stateDocRef.onSnapshot({ includeMetadataChanges: true }, function(snap){
+    if (snap.metadata.hasPendingWrites || !snap.exists) return;
+    applyingRemoteUpdate = true;
+    state = buildState(snap.data());
+    render();
+    applyingRemoteUpdate = false;
+  }, function(err){
+    console.error("Lost connection to the shared calendar.", err);
+  });
+}
+
+document.getElementById("auth-signin-btn").addEventListener("click", function(){
+  var provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(function(err){
+    console.error("Sign-in failed", err);
+    showAuthGate("Sign-in failed (" + err.message + "). Please try again.", false);
+  });
+});
+document.getElementById("auth-signout-btn").addEventListener("click", function(){
+  if (remoteUnsubscribe){ remoteUnsubscribe(); remoteUnsubscribe = null; }
+  auth.signOut();
+});
+
+auth.onAuthStateChanged(function(user){
+  if (remoteUnsubscribe){ remoteUnsubscribe(); remoteUnsubscribe = null; }
+  if (!user){
+    currentUserEmail = "";
+    showAuthGate("Sign in with your Google account to access the shared calendar.", false);
+    return;
+  }
+  var email = (user.email || "").toLowerCase();
+  var allowed = ALLOWED_EMAILS.map(function(e){ return e.toLowerCase(); }).indexOf(email) !== -1;
+  if (!allowed){
+    currentUserEmail = "";
+    showAuthGate("Signed in as " + user.email + ", but this account isn't on the access list for this calendar. Ask an owner to add you, or sign out and try a different account.", true);
+    return;
+  }
+  currentUserEmail = user.email;
+  startCloudSync();
+});
 
 })();
 </script>
