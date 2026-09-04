@@ -1,0 +1,2732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DPI Teacher Training Calendar</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2313294B'/%3E%3Crect x='20' y='28' width='60' height='52' rx='6' fill='%23fff'/%3E%3Crect x='20' y='28' width='60' height='14' rx='6' fill='%23E84A27'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<style>
+/* ========================= Design tokens ========================= */
+:root{
+  --blue-900:#0A1830;
+  --blue-800:#13294B;
+  --blue-700:#1B3A63;
+  --blue-600:#2E5A88;
+  --blue-400:#6B8CB8;
+  --blue-100:#E8EEF6;
+  --orange-700:#C43D1F;
+  --orange-600:#E84A27;
+  --orange-500:#F1793F;
+  --orange-300:#F5A671;
+  --orange-100:#FDEBE3;
+  --bg:#F5F7FB;
+  --card:#FFFFFF;
+  --border:#E2E8F0;
+  --text:#1A202C;
+  --text-muted:#64748B;
+  --text-faint:#98A5B8;
+  --radius:12px;
+  --radius-sm:8px;
+  --shadow:0 1px 3px rgba(19,41,75,0.08), 0 1px 2px rgba(19,41,75,0.06);
+  --shadow-md:0 8px 24px rgba(19,41,75,0.14);
+  --font-heading:'Sora',sans-serif;
+  --font-body:'Inter',sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:14px;
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;font-size:14px;}
+a{color:inherit;}
+::-webkit-scrollbar{width:10px;height:10px;}
+::-webkit-scrollbar-thumb{background:#CBD5E1;border-radius:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+
+/* ========================= Layout ========================= */
+#app{display:flex;flex-direction:column;height:100vh;}
+
+header.app-header{
+  position:relative;
+  background:linear-gradient(120deg, var(--blue-900) 0%, var(--blue-800) 55%, var(--blue-700) 100%);
+  color:#fff;
+  padding:14px 24px;
+  display:flex;
+  align-items:center;
+  gap:20px;
+  border-bottom:3px solid var(--orange-600);
+  overflow:hidden;
+  flex-shrink:0;
+}
+header.app-header::after{
+  content:'';
+  position:absolute;
+  top:-60px; right:-60px;
+  width:260px;height:260px;
+  background:radial-gradient(circle, rgba(232,74,39,0.35) 0%, rgba(232,74,39,0) 70%);
+  pointer-events:none;
+}
+.brand{display:flex;align-items:center;gap:10px;z-index:1;}
+.brand-mark{
+  width:34px;height:34px;border-radius:9px;
+  background:linear-gradient(135deg, var(--orange-600), var(--orange-500));
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-heading);font-weight:800;font-size:15px;color:#fff;
+  flex-shrink:0;
+}
+#title-input, .title-text{
+  font-family:var(--font-heading);
+  font-weight:700;
+  font-size:19px;
+  color:#fff;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:6px;
+  padding:4px 8px;
+  min-width:120px;
+}
+#title-input:hover, .title-text:hover{border-color:rgba(255,255,255,0.35);}
+#title-input:focus{outline:none;border-color:var(--orange-500);background:rgba(255,255,255,0.08);}
+.title-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw;}
+
+.view-switcher{display:flex;gap:4px;background:rgba(255,255,255,0.08);padding:4px;border-radius:999px;z-index:1;}
+.view-switcher button{
+  border:none;background:transparent;color:rgba(255,255,255,0.8);
+  padding:8px 16px;border-radius:999px;font-weight:600;font-size:13px;
+  transition:background .15s, color .15s;
+}
+.view-switcher button:hover{color:#fff;background:rgba(255,255,255,0.08);}
+.view-switcher button.active{background:var(--orange-600);color:#fff;box-shadow:0 2px 8px rgba(232,74,39,0.5);}
+
+.header-spacer{flex:1;}
+.header-actions{display:flex;gap:8px;align-items:center;z-index:1;}
+.btn-reset{
+  background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.25);color:rgba(255,255,255,0.85);
+  padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.02em;
+}
+.btn-reset:hover{background:rgba(255,255,255,0.18);color:#fff;}
+
+.layout{flex:1;display:flex;min-height:0;}
+.sidebar{
+  width:250px;flex-shrink:0;background:var(--card);border-right:1px solid var(--border);
+  padding:18px 14px;overflow-y:auto;
+}
+.upcoming-panel{
+  width:270px;flex-shrink:0;background:var(--card);border-left:1px solid var(--border);
+  padding:18px 16px;overflow-y:auto;
+}
+main#main-content{flex:1;overflow-y:auto;padding:22px 26px;min-width:0;display:flex;flex-direction:column;}
+
+.section-label{
+  font-family:var(--font-mono);font-size:11px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--text-faint);margin:0 0 10px 2px;
+}
+.sidebar-section{margin-bottom:24px;}
+
+.board-row{
+  display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:var(--radius-sm);
+  cursor:pointer;margin-bottom:2px;transition:background .12s;
+}
+.board-row:hover{background:var(--blue-100);}
+.board-row.active{background:var(--blue-800);color:#fff;}
+.board-row.active .board-count{color:rgba(255,255,255,0.7);}
+.board-row.active .board-actions button{color:rgba(255,255,255,0.75);}
+.board-row.folder{font-weight:800;}
+.board-row.folder .color-dot{border-radius:4px;}
+.board-row.nested{margin-left:20px;}
+.color-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,0.08);}
+.board-name{flex:1;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.board-count{font-family:var(--font-mono);font-size:11.5px;color:var(--text-muted);}
+.board-actions{display:none;gap:4px;}
+.board-row:hover .board-actions{display:flex;}
+.board-actions button{border:none;background:none;color:var(--text-faint);font-size:13px;padding:2px 4px;border-radius:4px;}
+.board-actions button:hover{color:var(--blue-800);background:rgba(0,0,0,0.06);}
+
+.btn-add-board{
+  width:100%;text-align:left;padding:9px 10px;border-radius:var(--radius-sm);border:1.5px dashed var(--border);
+  background:transparent;color:var(--text-muted);font-weight:600;font-size:13px;margin-top:6px;
+}
+.btn-add-board:hover{border-color:var(--orange-500);color:var(--orange-600);background:var(--orange-100);}
+
+.app-footer{
+  flex-shrink:0;display:flex;justify-content:flex-end;align-items:center;
+  padding:6px 18px;border-top:1px solid var(--border);background:var(--card);
+}
+.btn-reset-mini{
+  padding:5px 10px;border-radius:var(--radius-sm);border:1px solid transparent;
+  background:transparent;color:var(--text-faint);font-weight:600;font-size:11.5px;cursor:pointer;
+}
+.btn-reset-mini:hover{border-color:#DC2626;color:#DC2626;}
+
+/* Upcoming panel */
+.upcoming-item{
+  display:flex;gap:10px;align-items:flex-start;padding:10px 6px;border-bottom:1px solid var(--border);cursor:pointer;
+}
+.upcoming-item:last-child{border-bottom:none;}
+.upcoming-item:hover .upcoming-title{color:var(--orange-600);}
+.upcoming-date{
+  font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--blue-800);
+  background:var(--blue-100);border-radius:6px;padding:5px 6px;text-align:center;line-height:1.1;min-width:38px;
+}
+.upcoming-date .day{display:block;font-size:14px;}
+.upcoming-body{flex:1;min-width:0;}
+.upcoming-title{font-weight:600;font-size:13px;color:var(--text);transition:color .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.upcoming-board{font-size:11.5px;color:var(--text-muted);display:flex;align-items:center;gap:5px;margin-top:2px;}
+.empty-note{color:var(--text-faint);font-size:12.5px;padding:8px 2px;}
+
+/* ========================= Buttons / forms ========================= */
+.btn{
+  border:1px solid var(--border);background:var(--card);color:var(--text);
+  padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;transition:all .12s;
+}
+.btn:hover{border-color:var(--blue-600);color:var(--blue-800);}
+.btn-primary{background:var(--orange-600);border-color:var(--orange-600);color:#fff;}
+.btn-primary:hover{background:var(--orange-700);border-color:var(--orange-700);color:#fff;}
+.btn-secondary{background:var(--blue-800);border-color:var(--blue-800);color:#fff;}
+.btn-secondary:hover{background:var(--blue-900);border-color:var(--blue-900);color:#fff;}
+.btn-danger{color:#DC2626;border-color:#FCA5A5;background:#FEF2F2;}
+.btn-danger:hover{background:#FEE2E2;border-color:#DC2626;}
+.btn-sm{padding:6px 12px;font-size:12px;}
+.btn-icon{width:30px;height:30px;padding:0;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;}
+
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+.toolbar .grow{flex:1;}
+.page-title{font-family:var(--font-heading);font-weight:700;font-size:22px;margin:0;}
+
+input[type=text],input[type=date],input[type=number],input[type=email],select,textarea{
+  border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:#fff;color:var(--text);width:100%;
+}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue-600);box-shadow:0 0 0 3px rgba(46,90,136,0.12);}
+label{font-size:12.5px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:5px;}
+.field{margin-bottom:14px;}
+.field-row{display:flex;gap:12px;}
+.field-row .field{flex:1;}
+
+/* ========================= Modal ========================= */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(10,20,40,0.45);display:flex;align-items:center;justify-content:center;
+  z-index:100;padding:20px;
+}
+.modal{
+  background:#fff;border-radius:16px;width:100%;max-width:460px;max-height:88vh;overflow-y:auto;
+  box-shadow:var(--shadow-md);
+}
+.modal.modal-wide{max-width:640px;}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);}
+.modal-header h3{margin:0;font-family:var(--font-heading);font-size:17px;}
+.modal-close{border:none;background:none;font-size:20px;color:var(--text-faint);line-height:1;padding:4px;}
+.modal-close:hover{color:var(--text);}
+.modal-body{padding:20px 22px;}
+.modal-footer{padding:16px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+.modal-footer .push-left{margin-right:auto;}
+
+.color-palette{display:flex;flex-wrap:wrap;gap:8px;}
+.color-swatch{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer;}
+.color-swatch.selected{border-color:var(--text);box-shadow:0 0 0 2px #fff, 0 0 0 4px var(--text);}
+
+/* ========================= Calendar ========================= */
+.cal-nav{display:flex;align-items:center;gap:10px;}
+.cal-month-label{font-family:var(--font-mono);font-weight:700;font-size:15px;min-width:170px;text-align:center;}
+.calendar-view-wrap{display:flex;flex-direction:column;flex:1;min-height:0;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:auto repeat(6,1fr);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--border);gap:1px;flex:1;min-height:0;}
+.cal-dow{background:var(--blue-800);color:#fff;text-align:center;padding:8px 0;font-size:11px;font-weight:700;letter-spacing:.06em;font-family:var(--font-mono);}
+.cal-cell{background:#fff;min-height:64px;padding:6px;display:flex;flex-direction:column;gap:4px;cursor:pointer;position:relative;overflow:hidden;}
+.cal-cell:hover{background:#FAFBFF;}
+.cal-cell.other-month{background:#F8FAFC;}
+.cal-cell.other-month .cal-daynum{color:var(--text-faint);}
+.cal-cell.today{outline:2px solid var(--orange-600);outline-offset:-2px;}
+.cal-daynum{font-family:var(--font-mono);font-weight:700;font-size:12.5px;color:var(--text-muted);flex-shrink:0;}
+.cal-cell.today .cal-daynum{color:var(--orange-600);}
+.cal-chips{display:flex;flex-direction:column;gap:3px;overflow-y:auto;flex:1;min-height:0;}
+.cal-chip{
+  font-size:11px;padding:3px 6px;border-radius:5px;color:#fff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;
+}
+.cal-chip:hover{filter:brightness(1.1);}
+
+/* ========================= List view ========================= */
+.list-month-header{font-family:var(--font-heading);font-weight:700;font-size:16px;margin:22px 0 8px;color:var(--blue-800);}
+.list-month-header:first-child{margin-top:0;}
+.list-row{
+  display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:11px 14px;margin-bottom:7px;cursor:pointer;
+}
+.list-row:hover{border-color:var(--blue-600);box-shadow:var(--shadow);}
+.list-date{font-family:var(--font-mono);font-weight:700;font-size:12.5px;color:var(--blue-800);width:auto;min-width:64px;flex-shrink:0;}
+.list-title{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.list-board{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-shrink:0;}
+
+/* ========================= Board (kanban) ========================= */
+.board-columns{display:flex;gap:16px;align-items:flex-start;overflow-x:auto;padding-bottom:12px;}
+.kanban-group{display:flex;flex-direction:column;gap:8px;padding:10px;border:1.5px dashed #C7CEDB;border-radius:14px;background:rgba(19,41,75,0.02);flex-shrink:0;}
+.kanban-group-label{font-family:var(--font-heading);font-weight:800;font-size:13px;display:flex;align-items:center;gap:8px;padding:0 4px;}
+.kanban-group-cols{display:flex;gap:16px;align-items:flex-start;}
+.kanban-group .color-dot{border-radius:4px;}
+.kanban-col{
+  background:#EEF1F7;border-radius:var(--radius);width:270px;flex-shrink:0;padding:12px;min-height:120px;
+}
+.kanban-col-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:0 2px;}
+.kanban-col-title{font-family:var(--font-heading);font-weight:700;font-size:13.5px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kanban-count{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);background:#fff;border-radius:999px;padding:2px 7px;}
+.kanban-card{
+  background:#fff;border-radius:9px;padding:10px 12px;margin-bottom:8px;box-shadow:var(--shadow);border-left:4px solid var(--blue-800);
+  cursor:grab;
+}
+.kanban-card:hover{box-shadow:var(--shadow-md);}
+.kanban-card.dragging{opacity:.4;}
+.kanban-card-title{font-weight:600;font-size:13px;margin-bottom:3px;}
+.kanban-card-date{font-family:var(--font-mono);font-size:11px;color:var(--text-muted);}
+.kanban-col.dragover{outline:2px dashed var(--orange-500);outline-offset:-4px;}
+.kanban-add{width:100%;background:transparent;border:1.5px dashed #C7CEDB;border-radius:8px;padding:8px;font-size:12.5px;color:var(--text-muted);font-weight:600;}
+.kanban-add:hover{border-color:var(--orange-500);color:var(--orange-600);}
+
+/* ========================= Data tables (attendance/budget) ========================= */
+.data-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:#fff;}
+table.data-table{width:100%;border-collapse:collapse;font-size:13px;min-width:600px;}
+table.data-table th{
+  background:var(--blue-800);color:#fff;text-align:left;padding:10px 12px;font-weight:600;font-size:12px;
+  white-space:nowrap;position:sticky;top:0;
+}
+.th-remove{border:none;background:none;color:rgba(255,255,255,0.55);font-size:13px;padding:0 0 0 4px;line-height:1;vertical-align:middle;}
+.th-remove:hover{color:#fff;}
+table.data-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+table.data-table tbody tr:hover{background:#FAFBFF;}
+table.data-table input, table.data-table select{border:1px solid transparent;background:transparent;padding:6px 7px;border-radius:6px;width:100%;min-width:90px;}
+table.data-table input:hover, table.data-table select:hover{border-color:var(--border);}
+table.data-table input:focus, table.data-table select:focus{border-color:var(--blue-600);background:#fff;}
+table.data-table tfoot td{font-weight:700;font-family:var(--font-mono);background:#F8FAFC;border-top:2px solid var(--border);}
+tr.budget-group-header td{background:var(--blue-800);color:#fff;font-family:var(--font-heading);font-weight:800;font-size:12.5px;padding:8px 12px;display:flex;align-items:center;gap:8px;}
+tr.budget-group-header .color-dot{border:1.5px solid rgba(255,255,255,0.85);}
+tr.budget-group-header:hover{background:none;}
+tr.budget-group-subtotal td{background:#F1F5F9;font-weight:700;font-family:var(--font-mono);border-top:1px solid var(--border);}
+tr.budget-group-subtotal:hover{background:#F1F5F9;}
+td.budget-indent{padding-left:24px;}
+.row-action{border:none;background:none;color:var(--text-faint);font-size:13px;padding:4px 6px;border-radius:6px;}
+.row-action:hover{color:#DC2626;background:#FEF2F2;}
+
+.pb-list{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+.pb-category{border:1px solid var(--border);border-radius:var(--radius);background:#fff;overflow:hidden;}
+.pb-category-header{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--blue-800);}
+.pb-toggle{border:none;background:none;color:#fff;font-size:13px;cursor:pointer;padding:2px 4px;flex-shrink:0;}
+.pb-category-name{flex:1;border:1px solid transparent;background:rgba(255,255,255,0.08);color:#fff;font-family:var(--font-heading);font-weight:800;font-size:13.5px;padding:6px 8px;border-radius:6px;min-width:120px;}
+.pb-category-name::placeholder{color:rgba(255,255,255,0.6);}
+.pb-category-name:hover, .pb-category-name:focus{border-color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.14);}
+.pb-category-total{font-family:var(--font-mono);font-weight:700;color:#fff;white-space:nowrap;}
+.pb-category-header .btn-sm{flex-shrink:0;}
+.pb-category-header .row-action{color:rgba(255,255,255,0.7);}
+.pb-category-header .row-action:hover{color:#fff;background:rgba(255,255,255,0.15);}
+.pb-subtopics{padding:8px 12px 12px 40px;display:flex;flex-direction:column;gap:6px;}
+.pb-subtopic-row{display:flex;align-items:center;gap:8px;}
+.pb-subtopic-row input[type="text"]{flex:1;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;}
+.pb-subtopic-row input[type="number"]{width:120px;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;font-family:var(--font-mono);}
+.pb-empty-note{color:var(--text-faint);font-size:12.5px;padding:4px 0;}
+.pb-grand-total-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-family:var(--font-heading);font-weight:800;font-size:14px;padding:12px 16px;background:#F1F5F9;border:1px solid var(--border);border-radius:var(--radius);}
+.pb-grand-total-row span{font-family:var(--font-mono);color:var(--blue-800);}
+
+.two-col{display:flex;gap:20px;align-items:flex-start;min-height:0;}
+.side-list{width:250px;flex-shrink:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px;}
+.side-list-item{padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:2px;display:flex;justify-content:space-between;gap:6px;}
+.side-list-item:hover{background:var(--blue-100);}
+.side-list-item.active{background:var(--blue-800);color:#fff;}
+.side-list-item .sub{font-weight:400;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);}
+.side-list-item.active .sub{color:rgba(255,255,255,0.7);}
+.content-col{flex:1;min-width:0;}
+
+.tabs{display:flex;gap:4px;background:#EEF1F7;padding:4px;border-radius:10px;width:fit-content;margin-bottom:16px;}
+.tabs button{border:none;background:transparent;padding:8px 16px;border-radius:8px;font-weight:600;font-size:13px;color:var(--text-muted);}
+.tabs button.active{background:#fff;color:var(--blue-800);box-shadow:var(--shadow);}
+
+.stat-cards{display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;min-width:150px;flex:1;}
+.stat-card .label{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);}
+.stat-card .value{font-family:var(--font-heading);font-size:22px;font-weight:700;margin-top:4px;}
+.stat-card.income .value{color:var(--blue-800);}
+.stat-card.expense .value{color:var(--orange-600);}
+.stat-card.net .value{color:#0F8A5F;}
+
+.chart-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;}
+.chart-card h4{margin:0 0 14px;font-family:var(--font-heading);font-size:15px;}
+.legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:12px;}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);}
+.legend-swatch{width:11px;height:11px;border-radius:3px;flex-shrink:0;}
+
+.empty-state{text-align:center;padding:50px 20px;color:var(--text-muted);}
+.empty-state .big{font-size:32px;margin-bottom:8px;}
+
+@media (max-width: 1100px){ .upcoming-panel{display:none !important;} }
+@media (max-width: 780px){ .sidebar{display:none !important;} .two-col{flex-direction:column;} .side-list{width:100%;} }
+
+/* ========================= Auth gate ========================= */
+.auth-gate{
+  position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(120deg, var(--blue-900) 0%, var(--blue-800) 55%, var(--blue-700) 100%);
+  padding:20px;
+}
+.auth-card{
+  background:#fff;border-radius:16px;box-shadow:var(--shadow-md);padding:36px 32px;
+  max-width:360px;width:100%;text-align:center;
+}
+.auth-card .brand-mark{width:46px;height:46px;font-size:18px;margin:0 auto 18px;}
+.auth-message{color:var(--text-muted);font-size:13.5px;line-height:1.5;margin:0 0 22px;}
+.auth-card .btn{width:100%;margin-bottom:8px;}
+.auth-user-badge{font-size:12.5px;color:rgba(255,255,255,0.75);}
+</style>
+</head>
+<body>
+<div id="auth-gate" class="auth-gate">
+  <div class="auth-card">
+    <div class="brand-mark">DPI</div>
+    <p id="auth-message" class="auth-message">Sign in with your Google account to access the shared calendar.</p>
+    <button id="auth-signin-btn" class="btn btn-primary" type="button">Sign in with Google</button>
+    <button id="auth-signout-btn" class="btn" type="button" style="display:none;">Sign out</button>
+  </div>
+</div>
+<div id="app" style="display:none;">
+  <header class="app-header" id="app-header"></header>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar"></aside>
+    <main id="main-content"></main>
+    <aside class="upcoming-panel" id="upcoming-panel"></aside>
+  </div>
+  <footer class="app-footer">
+    <button class="btn-reset-mini" data-action="reset-data">Reset all data&hellip;</button>
+  </footer>
+</div>
+<div id="modal-root"></div>
+<input type="file" id="file-import-input" accept=".csv,.xlsx,.xls" style="display:none;">
+<input type="file" id="mailinglist-import-input" accept=".csv,.xlsx,.xls" style="display:none;">
+<input type="file" id="backup-import-input" accept=".json" style="display:none;">
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   Firebase (shared cloud storage) setup
+   See SETUP.md for how to create these values and the matching
+   Firestore security rules.
+   ============================================================ */
+var FIREBASE_CONFIG = {
+  apiKey: "REPLACE_WITH_YOUR_API_KEY",
+  authDomain: "REPLACE_WITH_YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
+  storageBucket: "REPLACE_WITH_YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
+  appId: "REPLACE_WITH_YOUR_APP_ID"
+};
+
+// The Google account emails allowed to sign in. This list only controls
+// what the UI shows - actual enforcement lives in the Firestore security
+// rules (see SETUP.md), which must list the same addresses.
+var ALLOWED_EMAILS = [
+  "person1@example.com",
+  "person2@example.com",
+  "person3@example.com",
+  "person4@example.com"
+];
+
+var FIRESTORE_COLLECTION = "dpiCalendar";
+var FIRESTORE_DOC_ID = "sharedState";
+
+var firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+var auth = firebase.auth();
+var db = firebase.firestore();
+var stateDocRef = db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
+var remoteUnsubscribe = null;
+var applyingRemoteUpdate = false;
+var currentUserEmail = "";
+
+/* ============================================================
+   Constants & defaults
+   ============================================================ */
+var HOLIDAYS_BOARD_ID = "board-holidays";
+
+var DEFAULT_BOARDS = [
+  { id: "board-cs-educator",  name: "CS Educator Workshop Series", color: "#13294B" },
+  { id: "board-newsletters",  name: "Newsletters",                 color: "#E84A27" },
+  { id: "board-conferences",  name: "Conferences",                 color: "#2E5A88" },
+  { id: "board-summer",       name: "Summer Intensives",           color: "#F1793F" },
+  { id: "board-quantum",      name: "Quantum Workshops",           color: "#6B8CB8" },
+  { id: "board-ai-ambass",    name: "AI Ambassadors",              color: "#F5A671" }
+];
+
+function defaultEvents(){
+  return [
+    { id: "evt-summer-intensive", title: "Summer Intensive",       date: "2027-07-12", boardId: "board-summer",      notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-cs-workshop-1",    title: "CS Educator Workshop 1", date: "2026-09-18", boardId: "board-cs-educator", notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-cs-workshop-2",    title: "CS Educator Workshop 2", date: "2026-11-13", boardId: "board-cs-educator", notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-cs-workshop-3",    title: "CS Educator Workshop 3", date: "2027-02-12", boardId: "board-cs-educator", notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-cs-workshop-4",    title: "CS Educator Workshop 4", date: "2027-04-16", boardId: "board-cs-educator", notes: "", attendeeIds: [], budgetItems: [] }
+  ];
+}
+
+function defaultHolidayEvents(){
+  return [
+    { id: "evt-holiday-labor-day",    title: "Labor Day",                   date: "2026-09-07", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-indigenous",   title: "Indigenous Peoples' Day",     date: "2026-10-12", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-veterans",     title: "Veterans Day",                date: "2026-11-11", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-thanksgiving", title: "Thanksgiving",                date: "2026-11-26", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-christmas",    title: "Christmas",                   date: "2026-12-25", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-new-year",     title: "New Year's Day",              date: "2027-01-01", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-mlk",          title: "Martin Luther King Jr. Day",  date: "2027-01-18", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-presidents",   title: "Presidents' Day",             date: "2027-02-15", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-memorial",     title: "Memorial Day",                date: "2027-05-31", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-juneteenth",   title: "Juneteenth",                  date: "2027-06-19", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] },
+    { id: "evt-holiday-independence", title: "Independence Day",            date: "2027-07-04", boardId: HOLIDAYS_BOARD_ID, notes: "", attendeeIds: [], budgetItems: [] }
+  ];
+}
+
+function seedHolidaysIfNeeded(s){
+  if (s.holidaysSeeded) return s;
+  var hasHolidaysBoard = s.boards.some(function(b){ return b.id === HOLIDAYS_BOARD_ID; });
+  if (!hasHolidaysBoard){
+    s.boards.push({ id: HOLIDAYS_BOARD_ID, name: "Holidays", color: "#64748B" });
+  }
+  var existingIds = {};
+  s.events.forEach(function(e){ existingIds[e.id] = true; });
+  defaultHolidayEvents().forEach(function(e){
+    if (!existingIds[e.id]) s.events.push(e);
+  });
+  s.holidaysSeeded = true;
+  return s;
+}
+
+var DEFAULT_PROPOSED_BUDGET_CATEGORIES = [
+  "CS Educator Workshop", "AI Ambassadors", "Summer Intensives",
+  "Conferences", "Registrations/Memberships", "Miscellaneous"
+];
+
+function seedProposedBudgetIfNeeded(s){
+  if (s.proposedBudgetSeeded) return s;
+  s.proposedBudget = s.proposedBudget || { categories: [] };
+  if (!s.proposedBudget.categories.length){
+    s.proposedBudget.categories = DEFAULT_PROPOSED_BUDGET_CATEGORIES.map(function(name){
+      return { id: uid(), name: name, collapsed: false, subtopics: [] };
+    });
+  }
+  s.proposedBudgetSeeded = true;
+  return s;
+}
+
+function defaultState(){
+  var s = {
+    title: "DPI Teacher Training Calendar",
+    boards: JSON.parse(JSON.stringify(DEFAULT_BOARDS)),
+    events: defaultEvents(),
+    participants: [],
+    customFields: [],
+    boardFilter: null,
+    currentView: "calendar",
+    calendarCursor: "2026-06",
+    resourceLinks: [],
+    holidaysSeeded: false,
+    budgetBoardIds: ["board-cs-educator", "board-summer", "board-ai-ambass"],
+    attendanceBoardIds: ["board-cs-educator", "board-ai-ambass", "board-summer"],
+    mailingListBoardIds: ["board-newsletters"],
+    proposedBudget: { categories: [] },
+    proposedBudgetSeeded: false
+  };
+  s = seedProposedBudgetIfNeeded(s);
+  return seedHolidaysIfNeeded(s);
+}
+
+var CATEGORY_PALETTE = ["#13294B","#E84A27","#2E5A88","#F1793F","#6B8CB8","#F5A671","#0F8A5F","#8B5CF6","#C43D1F","#94A3B8"];
+
+/* ============================================================
+   Persistence (with bootstrap defaults + retry-on-failure)
+   ============================================================ */
+function ensureDefaults(loaded){
+  var d = defaultState();
+  var merged = {};
+  Object.keys(d).forEach(function(key){
+    merged[key] = (loaded && loaded[key] !== undefined) ? loaded[key] : d[key];
+  });
+  return merged;
+}
+
+function migrateParticipant(p){
+  if (p.firstName === undefined && p.lastName === undefined){
+    var full = (p.name || "").trim();
+    var parts = full.split(/\s+/).filter(Boolean);
+    if (parts.length > 1){
+      p.lastName = parts.pop();
+      p.firstName = parts.join(" ");
+    } else {
+      p.firstName = full;
+      p.lastName = "";
+    }
+  }
+  if (p.firstName === undefined) p.firstName = "";
+  if (p.lastName === undefined) p.lastName = "";
+  delete p.name;
+  return p;
+}
+
+function buildState(loaded){
+  var s = ensureDefaults(loaded);
+  s.participants.forEach(migrateParticipant);
+  if (loaded && loaded.holidaysSeeded === undefined){
+    s.holidaysSeeded = false;
+  }
+  seedHolidaysIfNeeded(s);
+  if (loaded && loaded.proposedBudgetSeeded === undefined){
+    s.proposedBudgetSeeded = false;
+  }
+  seedProposedBudgetIfNeeded(s);
+  return s;
+}
+
+var saveTimer = null;
+function saveState(){
+  if (applyingRemoteUpdate) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(function(){ persist(state, 0); }, 400);
+}
+function persist(data, attempt){
+  // Firestore rejects `undefined` field values (unlike JSON.stringify,
+  // which just drops them); round-trip through JSON to strip any out.
+  var clean = JSON.parse(JSON.stringify(data));
+  stateDocRef.set(clean).catch(function(err){
+    if (attempt < 3){
+      setTimeout(function(){ persist(data, attempt + 1); }, 500 * Math.pow(2, attempt));
+    } else {
+      console.error("Failed to save data to the shared calendar after multiple attempts.", err);
+      alertModal("Your last change couldn't be saved to the shared calendar. Check your internet connection, then try the change again.", "Save failed");
+    }
+  });
+}
+
+/* ============================================================
+   Utilities
+   ============================================================ */
+function uid(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return "id-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10);
+}
+function esc(str){
+  return String(str === null || str === undefined ? "" : str).replace(/[&<>"']/g, function(c){
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+function attr(str){ return esc(str).replace(/`/g, "&#96;"); }
+function todayISO(){
+  var d = new Date();
+  return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+}
+function pad(n){ return n < 10 ? "0" + n : "" + n; }
+function parseISO(iso){
+  var parts = (iso || "1970-01-01").split("-").map(Number);
+  return new Date(parts[0], parts[1]-1, parts[2]);
+}
+function toISO(dateObj){ return dateObj.getFullYear() + "-" + pad(dateObj.getMonth()+1) + "-" + pad(dateObj.getDate()); }
+var MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+var MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var DOW_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function fmtDateLong(iso){
+  if (!iso) return "";
+  var d = parseISO(iso);
+  return MONTH_NAMES[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+}
+function eventEndDate(e){ return (e.endDate && e.endDate > e.date) ? e.endDate : e.date; }
+function isMultiDay(e){ return eventEndDate(e) !== e.date; }
+function eventDateRangeLabel(e){
+  if (!isMultiDay(e)) return fmtDateLong(e.date);
+  var d1 = parseISO(e.date), d2 = parseISO(eventEndDate(e));
+  if (d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth()){
+    return MONTH_NAMES[d1.getMonth()] + " " + d1.getDate() + "–" + d2.getDate() + ", " + d1.getFullYear();
+  }
+  return fmtDateLong(e.date) + " – " + fmtDateLong(eventEndDate(e));
+}
+function eventDateShortLabel(e){
+  if (!isMultiDay(e)) return MONTH_SHORT[parseISO(e.date).getMonth()].toUpperCase() + " " + pad(parseISO(e.date).getDate());
+  var d1 = parseISO(e.date), d2 = parseISO(eventEndDate(e));
+  return MONTH_SHORT[d1.getMonth()].toUpperCase() + " " + pad(d1.getDate()) + "–" + MONTH_SHORT[d2.getMonth()].toUpperCase() + " " + pad(d2.getDate());
+}
+function fmtMoney(n){
+  n = Number(n) || 0;
+  var sign = n < 0 ? "-" : "";
+  return sign + "$" + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function boardById(id){ return state.boards.find(function(b){ return b.id === id; }) || null; }
+function subcategoryById(boardId, subcategoryId){
+  var b = boardById(boardId);
+  if (!b || !subcategoryId) return null;
+  return (b.subcategories || []).find(function(sc){ return sc.id === subcategoryId; }) || null;
+}
+function boardColor(id){ var b = boardById(id); return b ? b.color : "#94A3B8"; }
+function boardName(id){ var b = boardById(id); return b ? b.name : "Uncategorized"; }
+function eventById(id){ return state.events.find(function(e){ return e.id === id; }); }
+function participantById(id){ return state.participants.find(function(p){ return p.id === id; }); }
+function fullName(p){ return ((p.firstName||"") + " " + (p.lastName||"")).trim() || "(Unnamed)"; }
+function sortedParticipants(list){
+  return list.slice().sort(function(a, b){
+    var an = ((a.lastName||"") + " " + (a.firstName||"")).trim().toLowerCase();
+    var bn = ((b.lastName||"") + " " + (b.firstName||"")).trim().toLowerCase();
+    return an.localeCompare(bn);
+  });
+}
+function sortedEvents(){ return state.events.slice().sort(function(a,b){ return (a.date || "").localeCompare(b.date || ""); }); }
+function boardIdsForFilter(filterId){
+  var b = boardById(filterId);
+  if (b && b.isFolder){
+    return state.boards.filter(function(x){ return !x.isFolder && x.parentId === filterId; }).map(function(x){ return x.id; });
+  }
+  return [filterId];
+}
+function visibleEvents(){
+  var list = sortedEvents();
+  if (state.boardFilter === "uncategorized") return list.filter(function(e){ return !e.boardId || !boardById(e.boardId); });
+  if (state.boardFilter){
+    var ids = boardIdsForFilter(state.boardFilter);
+    return list.filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
+  }
+  return list;
+}
+function budgetItemTotals(item){
+  var qty = Number(item.qty) || 0;
+  var unitCost = Number(item.unitCost) || 0;
+  var shipping = Number(item.shipping) || 0;
+  var total = qty * unitCost;
+  return { total: total, totalCost: total + shipping };
+}
+function budgetTotals(ev){
+  var total = 0;
+  (ev.budgetItems || []).forEach(function(item){ total += budgetItemTotals(item).totalCost; });
+  return { total: total };
+}
+
+/* ============================================================
+   State + UI (transient nav state, not persisted)
+   ============================================================ */
+var state = buildState(null);
+var ui = {
+  attendanceSession: "directory",
+  budgetTab: "overview",
+  budgetDetailId: null,
+  dragEventId: null,
+  participantSearch: "",
+  mailingListBoardId: null,
+  mailingListDomain: "all"
+};
+
+/* ============================================================
+   Root render
+   ============================================================ */
+function render(){
+  document.title = state.title || "DPI Teacher Training Calendar";
+  renderHeader();
+  var boardViews = ["calendar","list","board"];
+  var showChrome = boardViews.indexOf(state.currentView) !== -1;
+  document.getElementById("sidebar").style.display = showChrome ? "" : "none";
+  document.getElementById("upcoming-panel").style.display = showChrome ? "" : "none";
+  if (showChrome){ renderSidebar(); renderUpcoming(); }
+  renderMain();
+}
+
+function renderHeader(){
+  var el = document.getElementById("app-header");
+  var views = [["calendar","Calendar"],["list","List"],["board","Board"],["attendance","Attendance"],["mailinglist","Mailing List"],["budget","Budget"],["resources","Resources"]];
+  el.innerHTML =
+    '<div class="brand">' +
+      '<div class="brand-mark">DPI</div>' +
+      '<div class="title-text" data-action="edit-title" title="Click to rename">' + esc(state.title) + '</div>' +
+    '</div>' +
+    '<div class="view-switcher">' +
+      views.map(function(v){
+        return '<button data-action="switch-view" data-view="'+v[0]+'" class="'+(state.currentView===v[0]?"active":"")+'">'+v[1]+'</button>';
+      }).join("") +
+    '</div>' +
+    '<div class="header-spacer"></div>' +
+    '<div class="header-actions">' +
+      '<span class="auth-user-badge">' + esc(currentUserEmail) + '</span>' +
+      '<button class="btn-reset" data-action="sign-out" title="Sign out">Sign out</button>' +
+      '<button class="btn-reset" data-action="export-backup" title="Download everything as a JSON file">Export backup</button>' +
+      '<button class="btn-reset" data-action="import-backup" title="Restore from a previously exported JSON file">Import backup</button>' +
+    '</div>';
+}
+
+function boardEventCount(boardId){
+  return state.events.filter(function(e){ return e.boardId === boardId; }).length;
+}
+
+function organizeBoardsForDisplay(){
+  var folderIds = {};
+  state.boards.forEach(function(b){ if (b.isFolder) folderIds[b.id] = true; });
+  var childrenByParent = {};
+  state.boards.forEach(function(b){
+    if (!b.isFolder && b.parentId && folderIds[b.parentId]){
+      (childrenByParent[b.parentId] = childrenByParent[b.parentId] || []).push(b);
+    }
+  });
+  var topLevel = state.boards.filter(function(b){
+    return b.isFolder || !b.parentId || !folderIds[b.parentId];
+  });
+  return topLevel.map(function(b){
+    return { board: b, children: b.isFolder ? (childrenByParent[b.id] || []) : [] };
+  });
+}
+
+function boardRowHTML(b, nested){
+  var count = b.isFolder ? b.children_count : boardEventCount(b.id);
+  return '<div class="board-row ' + (nested?"nested":"") + ' ' + (b.isFolder?"folder":"") + ' ' + (state.boardFilter===b.id?"active":"") + '" data-action="board-filter" data-board="' + b.id + '">' +
+            '<span class="color-dot" style="background:' + b.color + '"></span>' +
+            '<span class="board-name">' + esc(b.name) + '</span>' +
+            '<span class="board-count">' + count + '</span>' +
+            '<span class="board-actions">' +
+              '<button data-action="edit-board" data-id="' + b.id + '" title="Edit">&#9998;</button>' +
+              '<button data-action="delete-board" data-id="' + b.id + '" title="Delete">&times;</button>' +
+            '</span>' +
+          '</div>';
+}
+
+function renderSidebar(){
+  var el = document.getElementById("sidebar");
+  var uncategorizedCount = state.events.filter(function(e){ return !e.boardId || !boardById(e.boardId); }).length;
+  var html = '<div class="sidebar-section">';
+  html += '<div class="section-label">Boards</div>';
+  html += '<div class="board-row ' + (!state.boardFilter ? "active" : "") + '" data-action="board-filter" data-board="">' +
+            '<span class="color-dot" style="background:linear-gradient(135deg,#13294B,#E84A27)"></span>' +
+            '<span class="board-name">All events</span>' +
+            '<span class="board-count">' + state.events.length + '</span>' +
+          '</div>';
+  organizeBoardsForDisplay().forEach(function(item){
+    if (item.board.isFolder){
+      item.board.children_count = item.children.reduce(function(sum, c){ return sum + boardEventCount(c.id); }, 0);
+    }
+    html += boardRowHTML(item.board, false);
+    item.children.forEach(function(c){ html += boardRowHTML(c, true); });
+  });
+  if (uncategorizedCount > 0){
+    html += '<div class="board-row ' + (state.boardFilter==="uncategorized"?"active":"") + '" data-action="board-filter" data-board="uncategorized">' +
+              '<span class="color-dot" style="background:#94A3B8"></span>' +
+              '<span class="board-name">Uncategorized</span>' +
+              '<span class="board-count">' + uncategorizedCount + '</span>' +
+            '</div>';
+  }
+  html += '<button class="btn-add-board" data-action="add-board">+ Add board</button>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderUpcoming(){
+  var el = document.getElementById("upcoming-panel");
+  var today = todayISO();
+  var upcoming = sortedEvents().filter(function(e){ return eventEndDate(e) >= today; }).slice(0, 8);
+  var html = '<div class="section-label">Upcoming</div>';
+  if (!upcoming.length){
+    html += '<div class="empty-note">No upcoming dates.</div>';
+  } else {
+    upcoming.forEach(function(e){
+      var d = parseISO(e.date);
+      html += '<div class="upcoming-item" data-action="edit-event" data-id="' + e.id + '">' +
+                '<div class="upcoming-date">' + MONTH_SHORT[d.getMonth()] + '<span class="day">' + d.getDate() + '</span></div>' +
+                '<div class="upcoming-body">' +
+                  '<div class="upcoming-title">' + esc(e.title) + '</div>' +
+                  '<div class="upcoming-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
+                '</div>' +
+              '</div>';
+    });
+  }
+  el.innerHTML = html;
+}
+
+function renderMain(){
+  var el = document.getElementById("main-content");
+  if (state.currentView === "calendar") el.innerHTML = calendarViewHTML();
+  else if (state.currentView === "list") el.innerHTML = listViewHTML();
+  else if (state.currentView === "board") el.innerHTML = boardViewHTML();
+  else if (state.currentView === "attendance") el.innerHTML = attendanceViewHTML();
+  else if (state.currentView === "mailinglist") el.innerHTML = mailingListViewHTML();
+  else if (state.currentView === "budget") el.innerHTML = budgetViewHTML();
+  else if (state.currentView === "resources") el.innerHTML = resourcesViewHTML();
+  if (state.currentView === "board") wireBoardDnD();
+  if (state.currentView === "attendance") wireDirectorySearch();
+}
+
+/* ============================================================
+   Calendar view
+   ============================================================ */
+function calendarViewHTML(){
+  var cursor = state.calendarCursor || todayISO().slice(0,7);
+  var parts = cursor.split("-").map(Number);
+  var year = parts[0], month = parts[1]-1;
+  var firstOfMonth = new Date(year, month, 1);
+  var startOffset = firstOfMonth.getDay();
+  var gridStart = new Date(year, month, 1 - startOffset);
+  var gridStartISO = toISO(gridStart);
+  var gridEndISO = toISO(new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 41));
+  var today = todayISO();
+  var evByDate = {};
+  visibleEvents().forEach(function(e){
+    var rangeStart = e.date > gridStartISO ? e.date : gridStartISO;
+    var rangeEnd = eventEndDate(e) < gridEndISO ? eventEndDate(e) : gridEndISO;
+    if (rangeStart > rangeEnd) return;
+    var cursor = parseISO(rangeStart);
+    var endCursor = parseISO(rangeEnd);
+    while (cursor <= endCursor){
+      var iso = toISO(cursor);
+      (evByDate[iso] = evByDate[iso] || []).push(e);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  });
+
+  var html = '<div class="calendar-view-wrap">';
+  html += '<div class="toolbar">' +
+    '<h2 class="page-title">Calendar</h2>' +
+    '<div class="grow"></div>' +
+    '<div class="cal-nav">' +
+      '<button class="btn btn-icon" data-action="nav-month" data-dir="-1">&larr;</button>' +
+      '<div class="cal-month-label">' + MONTH_NAMES[month] + ' ' + year + '</div>' +
+      '<button class="btn btn-icon" data-action="nav-month" data-dir="1">&rarr;</button>' +
+      '<button class="btn" data-action="nav-today">Today</button>' +
+    '</div>' +
+    '<button class="btn btn-primary" data-action="add-event" data-date="">+ New event</button>' +
+  '</div>';
+
+  html += '<div class="cal-grid">';
+  DOW_SHORT.forEach(function(d){ html += '<div class="cal-dow">' + d + '</div>'; });
+  for (var i = 0; i < 42; i++){
+    var cellDate = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i);
+    var iso = toISO(cellDate);
+    var otherMonth = cellDate.getMonth() !== month;
+    var dayEvents = evByDate[iso] || [];
+    html += '<div class="cal-cell ' + (otherMonth?"other-month":"") + ' ' + (iso===today?"today":"") + '" data-action="add-event" data-date="' + iso + '">' +
+              '<div class="cal-daynum">' + cellDate.getDate() + '</div>' +
+              '<div class="cal-chips">' +
+                dayEvents.map(function(e){
+                  return '<div class="cal-chip" style="background:' + boardColor(e.boardId) + '" data-action="edit-event" data-id="' + e.id + '" data-stop="1">' + esc(e.title) + '</div>';
+                }).join("") +
+              '</div>' +
+            '</div>';
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+/* ============================================================
+   List view
+   ============================================================ */
+function listViewHTML(){
+  var events = visibleEvents();
+  var html = '<div class="toolbar"><h2 class="page-title">List</h2><div class="grow"></div><button class="btn btn-primary" data-action="add-event" data-date="">+ New event</button></div>';
+  if (!events.length){
+    html += emptyState("No events yet.", "Create your first event to get started.");
+    return html;
+  }
+  var lastMonth = null;
+  events.forEach(function(e){
+    var d = parseISO(e.date);
+    var monthKey = MONTH_NAMES[d.getMonth()] + " " + d.getFullYear();
+    if (monthKey !== lastMonth){
+      html += '<div class="list-month-header">' + monthKey + '</div>';
+      lastMonth = monthKey;
+    }
+    html += '<div class="list-row" data-action="edit-event" data-id="' + e.id + '">' +
+              '<div class="list-date">' + eventDateShortLabel(e) + '</div>' +
+              '<div class="list-title">' + esc(e.title) + '</div>' +
+              '<div class="list-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
+            '</div>';
+  });
+  return html;
+}
+
+/* ============================================================
+   Board (kanban) view
+   ============================================================ */
+function boardViewHTML(){
+  var organized = organizeBoardsForDisplay();
+  if (state.boardFilter && state.boardFilter !== "uncategorized"){
+    var filterBoard = boardById(state.boardFilter);
+    if (filterBoard && filterBoard.isFolder){
+      organized = organized.filter(function(item){ return item.board.id === state.boardFilter; });
+    } else {
+      var found = null;
+      organized.forEach(function(item){
+        if (item.board.id === state.boardFilter) found = { board: item.board, children: [] };
+        item.children.forEach(function(c){ if (c.id === state.boardFilter) found = { board: c, children: [] }; });
+      });
+      organized = found ? [found] : [];
+    }
+  }
+  var showUncategorized = !state.boardFilter || state.boardFilter === "uncategorized";
+  var html = '<div class="toolbar"><h2 class="page-title">Board</h2><div class="grow"></div><button class="btn btn-primary" data-action="add-event" data-date="">+ New event</button></div>';
+  html += '<div class="board-columns">';
+  organized.forEach(function(item){
+    if (item.board.isFolder){
+      if (!item.children.length) return;
+      html += '<div class="kanban-group">';
+      html += '<div class="kanban-group-label"><span class="color-dot" style="background:' + item.board.color + '"></span>' + esc(item.board.name) + '</div>';
+      html += '<div class="kanban-group-cols">';
+      item.children.forEach(function(c){
+        var events = sortedEvents().filter(function(e){ return e.boardId === c.id; });
+        html += kanbanColumnHTML(c.id, c.name, c.color, events);
+      });
+      html += '</div></div>';
+    } else {
+      var events = sortedEvents().filter(function(e){ return e.boardId === item.board.id; });
+      html += kanbanColumnHTML(item.board.id, item.board.name, item.board.color, events);
+    }
+  });
+  if (showUncategorized){
+    var uncEvents = sortedEvents().filter(function(e){ return !e.boardId || !boardById(e.boardId); });
+    if (uncEvents.length || !state.boardFilter){
+      html += kanbanColumnHTML("", "Uncategorized", "#94A3B8", uncEvents);
+    }
+  }
+  html += '</div>';
+  return html;
+}
+function kanbanColumnHTML(boardId, name, color, events){
+  var html = '<div class="kanban-col" data-board-col="' + boardId + '">' +
+    '<div class="kanban-col-header">' +
+      '<span class="color-dot" style="background:' + color + '"></span>' +
+      '<span class="kanban-col-title">' + esc(name) + '</span>' +
+      '<span class="kanban-count">' + events.length + '</span>' +
+    '</div>';
+  events.forEach(function(e){
+    html += '<div class="kanban-card" draggable="true" data-event-id="' + e.id + '" style="border-left-color:' + color + '" data-action="edit-event" data-id="' + e.id + '">' +
+              '<div class="kanban-card-title">' + esc(e.title) + '</div>' +
+              '<div class="kanban-card-date">' + eventDateRangeLabel(e) + '</div>' +
+            '</div>';
+  });
+  html += '<button class="kanban-add" data-action="add-event" data-date="" data-board="' + boardId + '">+ Add card</button>';
+  html += '</div>';
+  return html;
+}
+function wireBoardDnD(){
+  var cards = document.querySelectorAll(".kanban-card");
+  cards.forEach(function(card){
+    card.addEventListener("dragstart", function(e){
+      ui.dragEventId = card.getAttribute("data-event-id");
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", function(){ card.classList.remove("dragging"); });
+  });
+  var cols = document.querySelectorAll(".kanban-col");
+  cols.forEach(function(col){
+    col.addEventListener("dragover", function(e){ e.preventDefault(); col.classList.add("dragover"); });
+    col.addEventListener("dragleave", function(){ col.classList.remove("dragover"); });
+    col.addEventListener("drop", function(e){
+      e.preventDefault();
+      col.classList.remove("dragover");
+      var boardId = col.getAttribute("data-board-col") || null;
+      var ev = eventById(ui.dragEventId);
+      if (ev){
+        ev.boardId = boardId || null;
+        saveState();
+        render();
+      }
+    });
+  });
+}
+
+/* ============================================================
+   Shared: empty state
+   ============================================================ */
+function emptyState(title, sub){
+  return '<div class="empty-state"><div class="big">&#128197;</div><div style="font-weight:700;font-size:15px;margin-bottom:4px;">' + esc(title) + '</div><div>' + esc(sub) + '</div></div>';
+}
+
+/* ============================================================
+   Attendance view
+   ============================================================ */
+function attendanceBoardIds(){ return state.attendanceBoardIds || []; }
+
+function attendanceViewHTML(){
+  var ids = attendanceBoardIds();
+  var sessions = sortedEvents().filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
+  var html = '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
+    '<button class="btn" data-action="add-field">+ Add info field</button>' +
+    (ui.attendanceSession === "directory" ? '<button class="btn" data-action="export-participants">Export participants</button>' : '') +
+    '<button class="btn" data-action="export-all-attendance">Download all attendance</button>' +
+    '<button class="btn btn-secondary" data-action="import-file">Import spreadsheet</button>' +
+    (ui.attendanceSession === "directory" ? '<button class="btn btn-primary" data-action="add-participant">+ Add participant</button>' : '') +
+  '</div>';
+  html += attendanceAreasBarHTML();
+  html += '<div class="two-col">';
+  html += '<div class="side-list">';
+  html += '<div class="side-list-item ' + (ui.attendanceSession==="directory"?"active":"") + '" data-action="attendance-select" data-id="directory">All Participants <span class="sub">' + state.participants.length + '</span></div>';
+  sessions.forEach(function(e){
+    html += '<div class="side-list-item ' + (ui.attendanceSession===e.id?"active":"") + '" data-action="attendance-select" data-id="' + e.id + '">' +
+              esc(e.title) + '<span class="sub">' + (e.attendeeIds||[]).length + '</span>' +
+            '</div>';
+  });
+  html += '</div>';
+  html += '<div class="content-col">';
+  if (ui.attendanceSession === "directory"){
+    html += directoryTableHTML();
+  } else {
+    var session = eventById(ui.attendanceSession);
+    if (!session || ids.indexOf(session.boardId) === -1){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
+    else html += sessionRosterHTML(session);
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function attendanceAreasBarHTML(){
+  var ids = attendanceBoardIds();
+  var chips = ids.map(function(id){
+    var b = boardById(id);
+    if (!b) return "";
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-100);color:var(--blue-800);border-radius:999px;padding:4px 6px 4px 12px;font-size:12.5px;font-weight:600;">' +
+      esc(b.name) +
+      '<button type="button" data-action="remove-attendance-board" data-id="' + id + '" title="Remove from Attendance" style="border:none;background:none;cursor:pointer;color:var(--blue-800);opacity:0.6;font-size:14px;line-height:1;padding:0 2px;">&times;</button>' +
+      '</span>';
+  }).join("");
+  var available = state.boards.filter(function(b){ return b.id !== HOLIDAYS_BOARD_ID && !b.isFolder && ids.indexOf(b.id) === -1; });
+  var addControl = available.length ?
+    '<select id="add-attendance-board-select" style="font-size:12.5px;border:1px dashed var(--border);border-radius:999px;padding:4px 8px;color:var(--text-muted);background:#fff;">' +
+      '<option value="">+ Add event board&hellip;</option>' +
+      available.map(function(b){ return '<option value="' + b.id + '">' + esc(b.name) + '</option>'; }).join("") +
+    '</select>' : '';
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Tracking attendance for:</span>' + chips + addControl +
+  '</div>';
+}
+
+function tableHeaderCells(){
+  var cells = '<th>First Name</th><th>Last Name</th><th>School</th><th>Email</th><th>IEIN</th>';
+  state.customFields.forEach(function(f){
+    cells += '<th>' + esc(f) + ' <button type="button" class="th-remove" data-action="delete-field" data-field="' + attr(f) + '" title="Remove this field">&times;</button></th>';
+  });
+  return cells;
+}
+
+function directoryTableHTML(){
+  if (!state.participants.length){
+    return emptyState("No participants yet.", "Add attendees from a session, or import a spreadsheet.");
+  }
+  var html = '<div class="field" style="max-width:340px;">' +
+    '<input type="text" id="participant-search" placeholder="Look up a participant by name, school, or email&hellip;" value="' + attr(ui.participantSearch||"") + '">' +
+  '</div>';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+    tableHeaderCells() + '<th>Sessions</th><th></th>' +
+    '</tr></thead><tbody>';
+  sortedParticipants(state.participants).forEach(function(p){
+    var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
+    var searchKey = (fullName(p) + " " + (p.school||"") + " " + (p.email||"")).toLowerCase();
+    html += '<tr data-search="' + attr(searchKey) + '">' + participantCells(p) +
+      '<td style="text-align:center;"><button class="row-action" style="color:var(--blue-800);font-weight:700;font-family:var(--font-mono);" data-action="view-participant" data-id="' + p.id + '" title="View events attended">' + sessionCount + '</button></td>' +
+      '<td><button class="row-action" data-action="delete-participant" data-id="' + p.id + '" title="Delete participant">&times;</button></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function wireDirectorySearch(){
+  var input = document.getElementById("participant-search");
+  if (!input) return;
+  function applyFilter(){
+    var q = input.value.trim().toLowerCase();
+    ui.participantSearch = input.value;
+    document.querySelectorAll("table.data-table tbody tr[data-search]").forEach(function(row){
+      row.hidden = !!q && row.getAttribute("data-search").indexOf(q) === -1;
+    });
+  }
+  input.addEventListener("input", applyFilter);
+  applyFilter();
+}
+
+function participantDetailModalHTML(participantId){
+  var p = participantById(participantId);
+  if (!p){
+    return '<div class="modal-header"><h3>Participant not found</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+      '<div class="modal-body"><div class="empty-note">This participant may have been deleted.</div></div>';
+  }
+  var attended = sortedEvents().filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; });
+  var html = '<div class="modal-header"><h3>' + esc(fullName(p)) + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>';
+  html += '<div class="modal-body">';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px 22px;margin-bottom:18px;font-size:13px;">';
+  if (p.school) html += '<div><span style="color:var(--text-muted);">School</span><br>' + esc(p.school) + '</div>';
+  if (p.email) html += '<div><span style="color:var(--text-muted);">Email</span><br>' + esc(p.email) + '</div>';
+  if (p.iein) html += '<div><span style="color:var(--text-muted);">IEIN</span><br>' + esc(p.iein) + '</div>';
+  state.customFields.forEach(function(f){
+    var val = p.custom && p.custom[f];
+    if (val) html += '<div><span style="color:var(--text-muted);">' + esc(f) + '</span><br>' + esc(val) + '</div>';
+  });
+  html += '</div>';
+  html += '<div class="section-label">Events attended (' + attended.length + ')</div>';
+  if (!attended.length){
+    html += '<div class="empty-note">Not enrolled in any sessions yet.</div>';
+  } else {
+    html += '<div style="max-height:340px;overflow-y:auto;">';
+    attended.forEach(function(e){
+      html += '<div class="list-row" style="margin-bottom:6px;cursor:pointer;" data-action="goto-session" data-id="' + e.id + '">' +
+                '<div class="list-date">' + eventDateShortLabel(e) + '</div>' +
+                '<div class="list-title">' + esc(e.title) + '</div>' +
+                '<div class="list-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
+              '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  html += '<div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Close</button></div>';
+  return html;
+}
+
+function participantCells(p){
+  var html = '';
+  html += '<td><input type="text" value="' + attr(p.firstName||"") + '" data-field="firstName" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.lastName||"") + '" data-field="lastName" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.school||"") + '" data-field="school" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.email||"") + '" data-field="email" data-participant="' + p.id + '"></td>';
+  html += '<td><input type="text" value="' + attr(p.iein||"") + '" data-field="iein" data-participant="' + p.id + '"></td>';
+  state.customFields.forEach(function(f){
+    var val = (p.custom && p.custom[f]) || "";
+    html += '<td><input type="text" value="' + attr(val) + '" data-customfield="' + attr(f) + '" data-participant="' + p.id + '"></td>';
+  });
+  return html;
+}
+
+function sessionRosterHTML(session){
+  var attendees = sortedParticipants((session.attendeeIds || []).map(participantById).filter(Boolean));
+  var html = '<div class="toolbar" style="margin-bottom:14px;">' +
+    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(session.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + eventDateRangeLabel(session) + '</span></h3>' +
+    '<div class="grow"></div>' +
+    '<button class="btn btn-sm" data-action="export-session-attendance" data-id="' + session.id + '">Download attendance</button>' +
+    '<button class="btn btn-sm" data-action="add-existing-attendee" data-id="' + session.id + '">+ Add existing</button>' +
+    '<button class="btn btn-sm btn-primary" data-action="add-new-attendee" data-id="' + session.id + '">+ Add attendee</button>' +
+  '</div>';
+  if (!attendees.length){
+    html += emptyState("No attendees enrolled.", "Add a new attendee or bring in someone from the directory.");
+    return html;
+  }
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' + tableHeaderCells() + '<th></th><th></th></tr></thead><tbody>';
+  attendees.forEach(function(p){
+    html += '<tr>' + participantCells(p) +
+      '<td><button class="row-action" style="color:var(--blue-800);" data-action="view-participant" data-id="' + p.id + '" title="View all events attended">&#128065;</button></td>' +
+      '<td><button class="row-action" data-action="remove-attendance" data-event="' + session.id + '" data-participant="' + p.id + '" title="Remove from session">&times;</button></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+/* ============================================================
+   Mailing List view
+   ============================================================ */
+function mailingListBoardIds(){ return state.mailingListBoardIds || []; }
+
+function mailingListAreasBarHTML(){
+  var ids = mailingListBoardIds();
+  var chips = ids.map(function(id){
+    var b = boardById(id);
+    if (!b) return "";
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-100);color:var(--blue-800);border-radius:999px;padding:4px 6px 4px 12px;font-size:12.5px;font-weight:600;">' +
+      esc(b.name) +
+      '<button type="button" data-action="remove-mailinglist-board" data-id="' + id + '" title="Remove this list" style="border:none;background:none;cursor:pointer;color:var(--blue-800);opacity:0.6;font-size:14px;line-height:1;padding:0 2px;">&times;</button>' +
+      '</span>';
+  }).join("");
+  var available = state.boards.filter(function(b){ return b.id !== HOLIDAYS_BOARD_ID && !b.isFolder && ids.indexOf(b.id) === -1; });
+  var addControl = available.length ?
+    '<select id="add-mailinglist-board-select" style="font-size:12.5px;border:1px dashed var(--border);border-radius:999px;padding:4px 8px;color:var(--text-muted);background:#fff;">' +
+      '<option value="">+ Add a board&hellip;</option>' +
+      available.map(function(b){ return '<option value="' + b.id + '">' + esc(b.name) + '</option>'; }).join("") +
+    '</select>' : '';
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Mailing lists for:</span>' + chips + addControl +
+  '</div>';
+}
+
+function subscriberDomain(email){
+  var at = String(email||"").lastIndexOf("@");
+  if (at === -1) return "(no domain)";
+  return email.slice(at+1).trim().toLowerCase() || "(no domain)";
+}
+
+function mailingListDomainCounts(subscribers){
+  var counts = {};
+  subscribers.forEach(function(s){
+    var d = subscriberDomain(s.email);
+    counts[d] = (counts[d] || 0) + 1;
+  });
+  return Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a] || a.localeCompare(b); }).map(function(d){ return { domain: d, count: counts[d] }; });
+}
+
+function mailingListViewHTML(){
+  var ids = mailingListBoardIds();
+  if (!ids.length){
+    return '<div class="toolbar"><h2 class="page-title">Mailing List</h2></div>' + mailingListAreasBarHTML() +
+      emptyState("No mailing lists yet.", "Add a board above to start building an email list for it.");
+  }
+  if (!ui.mailingListBoardId || ids.indexOf(ui.mailingListBoardId) === -1) ui.mailingListBoardId = ids[0];
+  var activeBoard = boardById(ui.mailingListBoardId);
+  var subscribers = (activeBoard && activeBoard.subscribers) || [];
+  var domains = mailingListDomainCounts(subscribers);
+  var filtered = ui.mailingListDomain === "all" ? subscribers : subscribers.filter(function(s){ return subscriberDomain(s.email) === ui.mailingListDomain; });
+  filtered = filtered.slice().sort(function(a, b){
+    var an = ((a.lastName||"") + " " + (a.firstName||"")).trim().toLowerCase();
+    var bn = ((b.lastName||"") + " " + (b.firstName||"")).trim().toLowerCase();
+    return an.localeCompare(bn);
+  });
+
+  var html = '<div class="toolbar"><h2 class="page-title">Mailing List</h2><div class="grow"></div>' +
+    '<button class="btn" data-action="mailinglist-import-file">Import spreadsheet</button>' +
+    '<button class="btn" data-action="export-mailinglist">Export list</button>' +
+    '<button class="btn btn-primary" data-action="add-subscriber">+ Add subscriber</button>' +
+  '</div>';
+  html += mailingListAreasBarHTML();
+
+  if (ids.length > 1){
+    html += '<div class="tabs" style="margin-bottom:14px;">' + ids.map(function(id){
+      var b = boardById(id);
+      if (!b) return "";
+      return '<button class="' + (ui.mailingListBoardId===id?"active":"") + '" data-action="mailinglist-select-board" data-id="' + id + '">' + esc(b.name) + '</button>';
+    }).join("") + '</div>';
+  }
+
+  if (!subscribers.length){
+    html += emptyState("No subscribers yet.", "Import a spreadsheet or add subscribers one at a time for " + esc(activeBoard ? activeBoard.name : "this board") + ".");
+    return html;
+  }
+
+  html += '<div class="two-col">';
+  html += '<div class="side-list">';
+  html += '<div class="side-list-item ' + (ui.mailingListDomain==="all"?"active":"") + '" data-action="mailinglist-select-domain" data-domain="all">All Subscribers<span class="sub">' + subscribers.length + '</span></div>';
+  domains.forEach(function(d){
+    html += '<div class="side-list-item ' + (ui.mailingListDomain===d.domain?"active":"") + '" data-action="mailinglist-select-domain" data-domain="' + attr(d.domain) + '">' +
+              esc(d.domain) + '<span class="sub">' + d.count + '</span>' +
+            '</div>';
+  });
+  html += '</div>';
+  html += '<div class="content-col">';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>First Name</th><th>Last Name</th><th>Email</th><th></th></tr></thead><tbody>';
+  filtered.forEach(function(s){
+    html += '<tr>' +
+      '<td><input type="text" value="' + attr(s.firstName||"") + '" data-subscriber-field="firstName" data-board="' + activeBoard.id + '" data-subscriber="' + s.id + '"></td>' +
+      '<td><input type="text" value="' + attr(s.lastName||"") + '" data-subscriber-field="lastName" data-board="' + activeBoard.id + '" data-subscriber="' + s.id + '"></td>' +
+      '<td><input type="text" value="' + attr(s.email||"") + '" data-subscriber-field="email" data-board="' + activeBoard.id + '" data-subscriber="' + s.id + '"></td>' +
+      '<td><button class="row-action" data-action="remove-subscriber" data-board="' + activeBoard.id + '" data-id="' + s.id + '" title="Remove">&times;</button></td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  html += '</div></div>';
+  return html;
+}
+
+/* ============================================================
+   Budget view
+   ============================================================ */
+function budgetEvents(){
+  var ids = state.budgetBoardIds || [];
+  return sortedEvents().filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
+}
+
+function budgetAreasBarHTML(){
+  var ids = state.budgetBoardIds || [];
+  var chips = ids.map(function(id){
+    var b = boardById(id);
+    if (!b) return "";
+    return '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--blue-100);color:var(--blue-800);border-radius:999px;padding:4px 6px 4px 12px;font-size:12.5px;font-weight:600;">' +
+      esc(b.name) +
+      '<button type="button" data-action="remove-budget-board" data-id="' + id + '" title="Remove from Budget" style="border:none;background:none;cursor:pointer;color:var(--blue-800);opacity:0.6;font-size:14px;line-height:1;padding:0 2px;">&times;</button>' +
+      '</span>';
+  }).join("");
+  var available = state.boards.filter(function(b){ return b.id !== HOLIDAYS_BOARD_ID && !b.isFolder && ids.indexOf(b.id) === -1; });
+  var addControl = available.length ?
+    '<select id="add-budget-board-select" style="font-size:12.5px;border:1px dashed var(--border);border-radius:999px;padding:4px 8px;color:var(--text-muted);background:#fff;">' +
+      '<option value="">+ Add budget area&hellip;</option>' +
+      available.map(function(b){ return '<option value="' + b.id + '">' + esc(b.name) + '</option>'; }).join("") +
+    '</select>' : '';
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Budget areas:</span>' + chips + addControl +
+  '</div>';
+}
+
+function budgetViewHTML(){
+  var html = '<div class="toolbar"><h2 class="page-title">Budget</h2><div class="grow"></div>' +
+    (ui.budgetTab === "proposed" ? '' : '<button class="btn btn-primary" data-action="add-event" data-date="" data-context="budget">+ New event</button>') +
+  '</div>';
+  html += '<div class="tabs">' +
+    '<button class="' + (ui.budgetTab==="overview"?"active":"") + '" data-action="budget-tab" data-tab="overview">Overview</button>' +
+    '<button class="' + (ui.budgetTab==="proposed"?"active":"") + '" data-action="budget-tab" data-tab="proposed">Proposed Budget</button>' +
+    '<button class="' + (ui.budgetTab==="charts"?"active":"") + '" data-action="budget-tab" data-tab="charts">Charts</button>' +
+  '</div>';
+  if (ui.budgetTab === "detail" && ui.budgetDetailId && eventById(ui.budgetDetailId)){
+    html += budgetDetailHTML(eventById(ui.budgetDetailId));
+  } else if (ui.budgetTab === "charts"){
+    html += budgetAreasBarHTML() + budgetChartsHTML();
+  } else if (ui.budgetTab === "proposed"){
+    html += proposedBudgetHTML();
+  } else {
+    ui.budgetTab = "overview";
+    html += budgetAreasBarHTML() + budgetOverviewHTML();
+  }
+  return html;
+}
+
+function budgetOverviewHTML(){
+  var events = budgetEvents();
+  if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
+  var ids = state.budgetBoardIds || [];
+  var grandTotal = 0;
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Sub-category</th><th>Date</th><th>Total Cost</th><th></th></tr></thead><tbody>';
+  ids.forEach(function(boardId){
+    var board = boardById(boardId);
+    if (!board) return;
+    var groupEvents = events.filter(function(e){ return e.boardId === boardId; });
+    if (!groupEvents.length) return;
+    var groupTotal = 0;
+    html += '<tr class="budget-group-header"><td colspan="5"><span class="color-dot" style="background:' + board.color + '"></span>' + esc(board.name) + '</td></tr>';
+    groupEvents.forEach(function(e){
+      var t = budgetTotals(e);
+      var sub = subcategoryById(e.boardId, e.subcategoryId);
+      groupTotal += t.total;
+      html += '<tr>' +
+        '<td class="budget-indent"><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
+        '<td>' + (sub ? esc(sub.name) : "&mdash;") + '</td>' +
+        '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
+        '<td style="font-family:var(--font-mono);font-weight:700;">' + fmtMoney(t.total) + '</td>' +
+        '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
+        '</tr>';
+    });
+    grandTotal += groupTotal;
+    html += '<tr class="budget-group-subtotal"><td colspan="3">Subtotal &mdash; ' + esc(board.name) + '</td>' +
+      '<td>' + fmtMoney(groupTotal) + '</td><td></td></tr>';
+  });
+  html += '</tbody><tfoot><tr><td colspan="3">Grand total</td>' +
+    '<td>' + fmtMoney(grandTotal) + '</td><td></td></tr></tfoot>';
+  html += '</table></div>';
+  return html;
+}
+
+function budgetDetailHTML(ev){
+  var t = budgetTotals(ev);
+  var board = boardById(ev.boardId);
+  var sub = subcategoryById(ev.boardId, ev.subcategoryId);
+  var subLabel = board ? esc(board.name) + (sub ? " &rsaquo; " + esc(sub.name) : "") + " &middot; " : "";
+  var html = '<div class="toolbar" style="margin-bottom:14px;">' +
+    '<button class="btn btn-sm" data-action="budget-tab" data-tab="overview">&larr; Overview</button>' +
+    '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(ev.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + subLabel + eventDateRangeLabel(ev) + '</span></h3>' +
+    '<div class="grow"></div>' +
+    '<button class="btn btn-danger btn-sm" data-action="delete-event" data-id="' + ev.id + '">Delete event</button>' +
+    '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
+  '</div>';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+      '<th>General</th><th>Company</th><th>Funds</th><th>CFOAP</th><th>Order Date</th>' +
+      '<th>Qty</th><th>Unit Cost</th><th>Total</th><th>Shipping</th><th>Total Cost</th><th></th>' +
+    '</tr></thead><tbody id="budget-rows-body">';
+  (ev.budgetItems || []).forEach(function(item){
+    html += budgetRowHTML(ev.id, item);
+  });
+  html += '</tbody><tfoot>' +
+    '<tr><td colspan="9">Total</td><td id="bt-total">' + fmtMoney(t.total) + '</td><td></td></tr>' +
+    '</tfoot></table></div>';
+  return html;
+}
+function budgetRowHTML(eventId, item){
+  var t = budgetItemTotals(item);
+  return '<tr data-item-row="' + item.id + '">' +
+    '<td><input type="text" value="' + attr(item.general||"") + '" data-budget-field="general" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.company||"") + '" data-budget-field="company" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.funds||"") + '" data-budget-field="funds" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="text" value="' + attr(item.cfoap||"") + '" data-budget-field="cfoap" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="date" value="' + attr(item.orderDate||"") + '" data-budget-field="orderDate" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="number" step="1" value="' + (item.qty||0) + '" data-budget-field="qty" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td><input type="number" step="0.01" value="' + (item.unitCost||0) + '" data-budget-field="unitCost" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td data-item-total="' + item.id + '" style="font-family:var(--font-mono);">' + fmtMoney(t.total) + '</td>' +
+    '<td><input type="number" step="0.01" value="' + (item.shipping||0) + '" data-budget-field="shipping" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td data-item-total-cost="' + item.id + '" style="font-family:var(--font-mono);font-weight:700;">' + fmtMoney(t.totalCost) + '</td>' +
+    '<td><button class="row-action" data-action="remove-budget-row" data-event="' + eventId + '" data-item="' + item.id + '">&times;</button></td>' +
+    '</tr>';
+}
+
+function budgetChartsHTML(){
+  var events = budgetEvents();
+  var hasData = events.some(function(e){ return (e.budgetItems||[]).length; });
+  if (!hasData) return emptyState("No budget data yet.", "Add line items to an event's budget to see charts here.");
+  var html = '<div class="chart-card"><h4>Total Cost by Event</h4>' + barChartSVG(events) + '</div>';
+  html += '<div class="chart-card"><h4>Total Cost by Funds</h4>' + donutChartSVG(events) + '</div>';
+  return html;
+}
+
+function barChartSVG(events){
+  var data = events.map(function(e){ var t = budgetTotals(e); return { name: e.title, total: t.total }; })
+                    .filter(function(d){ return d.total; });
+  if (!data.length) return emptyState("No budget data yet.", "");
+  var w = 720, h = 320, padL = 60, padB = 70, padT = 20, padR = 20;
+  var chartW = w - padL - padR, chartH = h - padT - padB;
+  var maxVal = Math.max.apply(null, data.map(function(d){ return d.total; }).concat([1]));
+  var niceMax = Math.ceil(maxVal / 5) * 5 || 5;
+  var groupW = chartW / data.length;
+  var barW = Math.min(44, groupW / 2);
+  var svg = '<svg viewBox="0 0 ' + w + ' ' + h + '" style="width:100%;height:auto;max-width:760px;" font-family="Inter, sans-serif">';
+  for (var g = 0; g <= 4; g++){
+    var gy = padT + chartH - (chartH * g / 4);
+    var gval = niceMax * g / 4;
+    svg += '<line x1="' + padL + '" y1="' + gy + '" x2="' + (w-padR) + '" y2="' + gy + '" stroke="#E2E8F0" stroke-width="1"/>';
+    svg += '<text x="' + (padL-8) + '" y="' + (gy+4) + '" font-size="10" fill="#64748B" text-anchor="end">' + Math.round(gval).toLocaleString() + '</text>';
+  }
+  data.forEach(function(d, i){
+    var cx = padL + groupW * i + groupW/2;
+    var barH = (d.total / niceMax) * chartH;
+    svg += '<rect x="' + (cx-barW/2) + '" y="' + (padT+chartH-barH) + '" width="' + barW + '" height="' + barH + '" fill="#13294B" rx="3"/>';
+    var label = d.name.length > 14 ? d.name.slice(0,13) + "…" : d.name;
+    svg += '<text x="' + cx + '" y="' + (padT+chartH+18) + '" font-size="10.5" fill="#1A202C" text-anchor="middle">' + esc(label) + '</text>';
+  });
+  svg += '<line x1="' + padL + '" y1="' + (padT+chartH) + '" x2="' + (w-padR) + '" y2="' + (padT+chartH) + '" stroke="#94A3B8" stroke-width="1.5"/>';
+  svg += '</svg>';
+  return svg;
+}
+
+function donutChartSVG(events){
+  var totals = {};
+  events.forEach(function(e){
+    (e.budgetItems||[]).forEach(function(item){
+      var fund = (item.funds || "").trim() || "Unspecified";
+      totals[fund] = (totals[fund] || 0) + budgetItemTotals(item).totalCost;
+    });
+  });
+  var cats = Object.keys(totals).filter(function(c){ return totals[c] > 0; }).sort(function(a,b){ return totals[b]-totals[a]; });
+  if (!cats.length) return emptyState("No cost data yet.", "");
+  var grand = cats.reduce(function(s,c){ return s + totals[c]; }, 0);
+  var r = 80, cx = 110, cy = 110, circumference = 2 * Math.PI * r, strokeW = 34;
+  var offset = 0;
+  var svg = '<svg viewBox="0 0 220 220" style="width:220px;height:220px;flex-shrink:0;">' +
+    '<g transform="rotate(-90 110 110)">';
+  cats.forEach(function(cat, i){
+    var frac = totals[cat] / grand;
+    var dash = frac * circumference;
+    var color = CATEGORY_PALETTE[i % CATEGORY_PALETTE.length];
+    svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + strokeW + '" ' +
+      'stroke-dasharray="' + dash + ' ' + (circumference-dash) + '" stroke-dashoffset="' + (-offset) + '"/>';
+    offset += dash;
+  });
+  svg += '</g>';
+  svg += '<text x="110" y="104" text-anchor="middle" font-size="12" fill="#64748B" font-family="JetBrains Mono, monospace">TOTAL</text>';
+  svg += '<text x="110" y="126" text-anchor="middle" font-size="17" font-weight="700" fill="#1A202C" font-family="Sora, sans-serif">' + fmtMoney(grand) + '</text>';
+  svg += '</svg>';
+  var legend = '<div class="legend">';
+  cats.forEach(function(cat, i){
+    var pct = Math.round((totals[cat] / grand) * 100);
+    legend += '<div class="legend-item"><span class="legend-swatch" style="background:' + CATEGORY_PALETTE[i % CATEGORY_PALETTE.length] + '"></span>' + esc(cat) + ' &mdash; ' + fmtMoney(totals[cat]) + ' (' + pct + '%)</div>';
+  });
+  legend += '</div>';
+  return '<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;">' + svg + '<div style="flex:1;min-width:200px;">' + legend + '</div></div>';
+}
+
+/* ============================================================
+   Proposed Budget (annual planning) view
+   ============================================================ */
+function proposedCategoryTotal(cat){
+  return (cat.subtopics || []).reduce(function(sum, sub){ return sum + (Number(sub.amount) || 0); }, 0);
+}
+function proposedBudgetGrandTotal(){
+  var categories = (state.proposedBudget && state.proposedBudget.categories) || [];
+  return categories.reduce(function(sum, cat){ return sum + proposedCategoryTotal(cat); }, 0);
+}
+
+function proposedBudgetHTML(){
+  var categories = (state.proposedBudget && state.proposedBudget.categories) || [];
+  var html = '<div class="toolbar" style="margin-bottom:14px;"><div class="grow"></div>' +
+    '<button class="btn btn-primary btn-sm" data-action="add-budget-category">+ Add category</button>' +
+  '</div>';
+  if (!categories.length){
+    return html + emptyState("No proposed budget yet.", "Add a category to start planning next year's budget.");
+  }
+  html += '<div class="pb-list">';
+  categories.forEach(function(cat){
+    var subtopics = cat.subtopics || [];
+    html += '<div class="pb-category">';
+    html += '<div class="pb-category-header">' +
+      '<button type="button" class="pb-toggle" data-action="toggle-budget-category" data-id="' + cat.id + '" title="' + (cat.collapsed?"Expand":"Collapse") + '">' + (cat.collapsed ? "&#9656;" : "&#9662;") + '</button>' +
+      '<input type="text" class="pb-category-name" value="' + attr(cat.name||"") + '" placeholder="Category name" data-proposed-field="name" data-category="' + cat.id + '">' +
+      '<span class="pb-category-total" data-category-total="' + cat.id + '">' + fmtMoney(proposedCategoryTotal(cat)) + '</span>' +
+      '<button type="button" class="btn btn-sm" data-action="add-budget-subtopic" data-category="' + cat.id + '">+ Subtopic</button>' +
+      '<button type="button" class="row-action" data-action="remove-budget-category" data-category="' + cat.id + '" title="Delete category">&times;</button>' +
+    '</div>';
+    if (!cat.collapsed){
+      html += '<div class="pb-subtopics">';
+      if (!subtopics.length){
+        html += '<div class="pb-empty-note">No subtopics yet.</div>';
+      }
+      subtopics.forEach(function(sub){
+        html += '<div class="pb-subtopic-row">' +
+          '<input type="text" value="' + attr(sub.name||"") + '" placeholder="Subtopic" data-proposed-field="name" data-category="' + cat.id + '" data-subtopic="' + sub.id + '">' +
+          '<input type="number" step="0.01" value="' + (sub.amount||0) + '" data-proposed-field="amount" data-category="' + cat.id + '" data-subtopic="' + sub.id + '">' +
+          '<button type="button" class="row-action" data-action="remove-budget-subtopic" data-category="' + cat.id + '" data-subtopic="' + sub.id + '" title="Remove subtopic">&times;</button>' +
+        '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div class="pb-grand-total-row">Proposed total for the year <span id="pb-grand-total">' + fmtMoney(proposedBudgetGrandTotal()) + '</span></div>';
+  return html;
+}
+
+/* ============================================================
+   Resources view
+   ============================================================ */
+function sortedResourceLinks(){
+  return state.resourceLinks.slice().sort(function(a, b){ return (a.title||"").toLowerCase().localeCompare((b.title||"").toLowerCase()); });
+}
+
+function resourcesViewHTML(){
+  var html = '<div class="toolbar"><h2 class="page-title">Resources</h2><div class="grow"></div>' +
+    '<button class="btn btn-primary" data-action="add-link">+ Add link</button>' +
+  '</div>';
+  var links = sortedResourceLinks();
+  if (!links.length){
+    html += emptyState("No links yet.", "Add links to meeting agendas, budget documents, or anything else your team needs handy.");
+    return html;
+  }
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Title</th><th>Notes</th><th></th></tr></thead><tbody>';
+  links.forEach(function(l){
+    html += '<tr>' +
+      '<td><a href="' + attr(normalizeUrl(l.url)) + '" target="_blank" rel="noopener noreferrer" style="font-weight:600;color:var(--blue-800);">' + esc(l.title) + '</a></td>' +
+      '<td style="color:var(--text-muted);">' + esc(l.notes||"") + '</td>' +
+      '<td style="white-space:nowrap;">' +
+        '<button class="row-action" style="color:var(--blue-800);" data-action="edit-link" data-id="' + l.id + '" title="Edit">&#9998;</button>' +
+        '<button class="row-action" data-action="delete-link" data-id="' + l.id + '" title="Delete">&times;</button>' +
+      '</td>' +
+      '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function normalizeUrl(u){
+  u = (u || "").trim();
+  if (!u) return "#";
+  return /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : "https://" + u;
+}
+
+function linkModalHTML(linkId){
+  var link = linkId ? state.resourceLinks.find(function(l){ return l.id === linkId; }) : null;
+  var isNew = !link;
+  return '<form id="link-form" data-submit-action="submit-link-form" data-id="' + (link?link.id:"") + '">' +
+    '<div class="modal-header"><h3>' + (isNew?"Add link":"Edit link") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Title</label><input type="text" name="title" required value="' + attr(link?link.title:"") + '" placeholder="e.g. October Budget Meeting Agenda"></div>' +
+      '<div class="field"><label>URL</label><input type="text" name="url" required value="' + attr(link?link.url:"") + '" placeholder="https://..."></div>' +
+      '<div class="field"><label>Notes <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label><input type="text" name="notes" value="' + attr(link?link.notes:"") + '" placeholder="e.g. Teacher training meeting, Sept 2026"></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      (link ? '<button type="button" class="btn btn-danger push-left" data-action="delete-link" data-id="' + link.id + '">Delete</button>' : '') +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">' + (isNew?"Add link":"Save changes") + '</button>' +
+    '</div>' +
+  '</form>';
+}
+
+/* ============================================================
+   Modal system
+   ============================================================ */
+function openModal(html, wide){
+  document.getElementById("modal-root").innerHTML =
+    '<div class="modal-overlay" data-action="close-modal-overlay">' +
+      '<div class="modal ' + (wide?"modal-wide":"") + '" data-stop="1">' + html + '</div>' +
+    '</div>';
+  var firstInput = document.querySelector(".modal input, .modal select, .modal textarea");
+  if (firstInput) setTimeout(function(){ firstInput.focus(); }, 30);
+}
+function closeModal(){ document.getElementById("modal-root").innerHTML = ""; }
+
+function confirmModal(message, onConfirm, opts){
+  opts = opts || {};
+  var html = '<div class="modal-header"><h3>' + esc(opts.title || "Are you sure?") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body"><p style="margin:0;color:var(--text);line-height:1.5;">' + esc(message) + '</p></div>' +
+    '<div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+    '<button type="button" class="btn btn-danger" id="confirm-modal-yes">' + esc(opts.confirmLabel || "Delete") + '</button></div>';
+  openModal(html);
+  document.getElementById("confirm-modal-yes").addEventListener("click", function(){
+    closeModal();
+    onConfirm();
+  });
+}
+
+function alertModal(message, title){
+  var html = '<div class="modal-header"><h3>' + esc(title || "Notice") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body"><p style="margin:0;color:var(--text);line-height:1.5;">' + esc(message) + '</p></div>' +
+    '<div class="modal-footer"><button type="button" class="btn btn-primary" data-action="close-modal">OK</button></div>';
+  openModal(html);
+}
+
+function subcategoryFieldHTML(board, selectedId){
+  var subs = (board && board.subcategories) || [];
+  if (!subs.length) return '';
+  return '<div class="field"><label>Sub-category <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label>' +
+    '<select name="subcategoryId">' +
+      '<option value="">None</option>' +
+      subs.map(function(sc){ return '<option value="' + sc.id + '" ' + (selectedId===sc.id?"selected":"") + '>' + esc(sc.name) + '</option>'; }).join("") +
+    '</select></div>';
+}
+
+function eventModalHTML(eventId, prefillDate, prefillBoard){
+  var ev = eventId ? eventById(eventId) : null;
+  var isNew = !ev;
+  var selectedBoardId = ev ? ev.boardId : prefillBoard;
+  var optionFor = function(b){
+    return '<option value="' + b.id + '" ' + (selectedBoardId===b.id?"selected":"") + '>' + esc(b.name) + '</option>';
+  };
+  var assignable = state.boards.filter(function(b){ return !b.isFolder; });
+  var folders = state.boards.filter(function(b){ return b.isFolder; });
+  var boardOptions = '<option value="">Uncategorized</option>';
+  assignable.filter(function(b){
+    var parent = b.parentId ? boardById(b.parentId) : null;
+    return !parent || !parent.isFolder;
+  }).forEach(function(b){ boardOptions += optionFor(b); });
+  folders.forEach(function(folder){
+    var children = assignable.filter(function(b){ return b.parentId === folder.id; });
+    if (!children.length) return;
+    boardOptions += '<optgroup label="' + attr(folder.name) + '">';
+    children.forEach(function(b){ boardOptions += optionFor(b); });
+    boardOptions += '</optgroup>';
+  });
+  return '<form id="event-form" data-submit-action="submit-event-form" data-id="' + (ev?ev.id:"") + '">' +
+    '<div class="modal-header"><h3>' + (isNew?"New event":"Edit event") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Board</label><select name="boardId">' + boardOptions + '</select></div>' +
+      '<div id="subcat-wrap">' + subcategoryFieldHTML(boardById(selectedBoardId), ev?ev.subcategoryId:null) + '</div>' +
+      '<div class="field"><label>Title</label><input type="text" name="title" required value="' + attr(ev?ev.title:"") + '" placeholder="e.g. CS Educator Workshop 5"></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>Start date</label><input type="date" name="date" required value="' + (ev?ev.date:(prefillDate||todayISO())) + '"></div>' +
+        '<div class="field"><label>End date <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label><input type="date" name="endDate" value="' + (ev && isMultiDay(ev) ? ev.endDate : "") + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>Notes</label><textarea name="notes" rows="3" placeholder="Optional details">' + esc(ev?ev.notes:"") + '</textarea></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      (ev ? '<button type="button" class="btn btn-danger push-left" data-action="delete-event" data-id="' + ev.id + '">Delete</button>' : '') +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">' + (isNew?"Create event":"Save changes") + '</button>' +
+    '</div>' +
+  '</form>';
+}
+
+function subcatRowHTML(id, name){
+  return '<div class="subcat-row" data-subcat-row data-subcat-id="' + esc(id||"") + '" style="display:flex;gap:6px;margin-bottom:6px;">' +
+    '<input type="text" class="subcat-name-input" value="' + attr(name||"") + '" placeholder="e.g. Fall cohort" style="flex:1;">' +
+    '<button type="button" class="row-action" data-action="remove-subcat-row">&times;</button>' +
+    '</div>';
+}
+
+function boardModalHTML(boardId){
+  var b = boardId ? boardById(boardId) : null;
+  var isNew = !b;
+  var isFolder = b ? !!b.isFolder : false;
+  var swatches = CATEGORY_PALETTE.concat(["#F5A576","#94A3B8","#0F8A5F","#F59E0B"]);
+  var selectedColor = b ? b.color : swatches[0];
+  var folderOptions = state.boards.filter(function(x){ return x.isFolder && (!b || x.id !== b.id); });
+  var parentSelectHTML = '<option value="">No parent (top-level)</option>' + folderOptions.map(function(f){
+    return '<option value="' + f.id + '" ' + ((b && b.parentId === f.id) ? "selected" : "") + '>' + esc(f.name) + '</option>';
+  }).join("");
+  var html = '<form id="board-form" data-submit-action="submit-board-form" data-id="' + (b?b.id:"") + '">' +
+    '<div class="modal-header"><h3>' + (isNew?"Add board":"Edit board") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Name</label><input type="text" name="name" required value="' + attr(b?b.name:"") + '" placeholder="e.g. Regional Meetups"></div>' +
+      '<div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;color:var(--text);"><input type="checkbox" name="isFolder" id="board-is-folder" ' + (isFolder?"checked":"") + ' style="width:auto;">This is a group that holds other boards, not events directly</label></div>' +
+      '<div class="field" id="board-parent-field"' + (isFolder?' hidden':'') + '><label>Parent group <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label><select name="parentId">' + parentSelectHTML + '</select></div>' +
+      '<div class="field"><label>Color</label><div class="color-palette" id="color-palette">' +
+        swatches.map(function(c){ return '<div class="color-swatch ' + (c===selectedColor?"selected":"") + '" style="background:' + c + '" data-color="' + c + '" data-action="pick-color"></div>'; }).join("") +
+      '</div>' +
+      '<input type="hidden" name="color" id="color-input" value="' + selectedColor + '">' +
+      '</div>' +
+      '<div class="field"><label>Sub-categories <span style="font-weight:400;color:var(--text-faint);">(optional)</span></label>' +
+        '<div id="subcat-rows">' +
+          ((b && b.subcategories) || []).map(function(sc){ return subcatRowHTML(sc.id, sc.name); }).join("") +
+        '</div>' +
+        '<button type="button" class="btn btn-sm" data-action="add-subcat-row">+ Add sub-category</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">' + (isNew?"Add board":"Save changes") + '</button>' +
+    '</div>' +
+  '</form>';
+  return html;
+}
+
+function attendeeModalHTML(sessionId){
+  var isEnroll = !!sessionId;
+  return '<form id="attendee-form" data-submit-action="submit-new-attendee" data-event="' + (sessionId||"") + '">' +
+    '<div class="modal-header"><h3>' + (isEnroll ? "Add attendee" : "Add participant") + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field-row">' +
+        '<div class="field"><label>First Name</label><input type="text" name="firstName" required></div>' +
+        '<div class="field"><label>Last Name</label><input type="text" name="lastName"></div>' +
+      '</div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>School</label><input type="text" name="school"></div>' +
+        '<div class="field"><label>Email</label><input type="email" name="email"></div>' +
+      '</div>' +
+      '<div class="field"><label>IEIN</label><input type="text" name="iein"></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">' + (isEnroll ? "Add & enroll" : "Add participant") + '</button>' +
+    '</div>' +
+  '</form>';
+}
+
+function subscriberModalHTML(boardId){
+  var board = boardById(boardId);
+  return '<form id="subscriber-form" data-submit-action="submit-subscriber-form" data-board="' + boardId + '">' +
+    '<div class="modal-header"><h3>Add subscriber' + (board ? ' &mdash; ' + esc(board.name) : '') + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field-row">' +
+        '<div class="field"><label>First Name</label><input type="text" name="firstName"></div>' +
+        '<div class="field"><label>Last Name</label><input type="text" name="lastName"></div>' +
+      '</div>' +
+      '<div class="field"><label>Email</label><input type="email" name="email" required></div>' +
+    '</div>' +
+    '<div class="modal-footer">' +
+      '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
+      '<button type="submit" class="btn btn-primary">Add subscriber</button>' +
+    '</div>' +
+  '</form>';
+}
+
+function existingAttendeeModalHTML(sessionId){
+  var session = eventById(sessionId);
+  var already = session ? (session.attendeeIds||[]) : [];
+  var candidates = sortedParticipants(state.participants.filter(function(p){ return already.indexOf(p.id) === -1; }));
+  var html = '<div class="modal-header"><h3>Add existing participant</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">';
+  if (!candidates.length){
+    html += '<div class="empty-note">Everyone in the directory is already enrolled in this session.</div>';
+  } else {
+    html += '<div style="max-height:320px;overflow-y:auto;">';
+    candidates.forEach(function(p){
+      html += '<div class="side-list-item" style="cursor:pointer;" data-action="enroll-existing" data-event="' + sessionId + '" data-participant="' + p.id + '">' +
+        esc(fullName(p)) + '<span class="sub">' + esc(p.school||"") + '</span></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Close</button></div>';
+  return html;
+}
+
+function addFieldModalHTML(){
+  return '<form id="field-form" data-submit-action="submit-add-field">' +
+    '<div class="modal-header"><h3>Add info field</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Field name</label><input type="text" name="fieldName" required placeholder="e.g. T-shirt size"></div>' +
+    '</div>' +
+    '<div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button type="submit" class="btn btn-primary">Add field</button></div>' +
+  '</form>';
+}
+
+/* ============================================================
+   Actions
+   ============================================================ */
+var ACTIONS = {
+  "switch-view": function(t){ state.currentView = t.getAttribute("data-view"); saveState(); render(); },
+
+  "edit-title": function(t){
+    var span = t;
+    var input = document.createElement("input");
+    input.id = "title-input"; input.type = "text"; input.value = state.title;
+    span.replaceWith(input);
+    input.focus(); input.select();
+    function commit(){ state.title = input.value.trim() || "DPI Teacher Training Calendar"; saveState(); render(); }
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); input.blur(); } if (e.key === "Escape"){ render(); } });
+  },
+
+  "reset-data": function(){
+    confirmModal("This will permanently erase all boards, events, participants, and budgets, and restore the default setup. Continue?", function(){
+      confirmModal("Last chance: everything currently saved will be gone for good, with no way to undo it. Erase it all?", function(){
+        state = defaultState();
+        ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all" };
+        saveState(); render();
+      }, { title: "Are you absolutely sure?", confirmLabel: "Yes, erase everything" });
+    }, { title: "Reset all data?", confirmLabel: "Reset everything" });
+  },
+  "export-backup": function(){ downloadBackupJSON(); },
+  "sign-out": function(){
+    if (remoteUnsubscribe){ remoteUnsubscribe(); remoteUnsubscribe = null; }
+    auth.signOut();
+  },
+  "import-backup": function(){
+    var input = document.getElementById("backup-import-input");
+    input.value = "";
+    input.click();
+  },
+
+  "board-filter": function(t){
+    var b = t.getAttribute("data-board");
+    state.boardFilter = b || null;
+    saveState(); render();
+  },
+  "add-board": function(){ openModal(boardModalHTML(null)); },
+  "remove-budget-board": function(t){
+    var id = t.getAttribute("data-id");
+    state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
+    saveState(); render();
+  },
+  "edit-board": function(t){ openModal(boardModalHTML(t.getAttribute("data-id"))); },
+  "add-link": function(){ openModal(linkModalHTML(null)); },
+  "edit-link": function(t){ openModal(linkModalHTML(t.getAttribute("data-id"))); },
+  "submit-link-form": function(form){
+    var fd = new FormData(form);
+    var id = form.getAttribute("data-id");
+    var title = (fd.get("title")||"").toString().trim();
+    var url = (fd.get("url")||"").toString().trim();
+    var notes = (fd.get("notes")||"").toString().trim();
+    if (!title || !url) return;
+    if (id){
+      var l = state.resourceLinks.find(function(x){ return x.id === id; });
+      if (l){ l.title = title; l.url = url; l.notes = notes; }
+    } else {
+      state.resourceLinks.push({ id: uid(), title: title, url: url, notes: notes });
+    }
+    saveState(); closeModal(); render();
+  },
+  "delete-link": function(t){
+    var id = t.getAttribute("data-id");
+    var l = state.resourceLinks.find(function(x){ return x.id === id; });
+    if (!l) return;
+    confirmModal('Delete "' + l.title + '"?', function(){
+      state.resourceLinks = state.resourceLinks.filter(function(x){ return x.id !== id; });
+      saveState(); render();
+    }, { title: "Delete link?" });
+  },
+  "delete-board": function(t){
+    var id = t.getAttribute("data-id");
+    var b = boardById(id);
+    if (!b) return;
+    var subCount = (b.subscribers || []).length;
+    var msg = b.isFolder
+      ? 'Delete "' + b.name + '"? Its sub-boards will become top-level boards (not deleted).'
+      : 'Delete "' + b.name + '"? Events on this board will become uncategorized (not deleted)' +
+        (subCount ? ", and its mailing list of " + subCount + " subscriber" + (subCount===1?"":"s") + " will be permanently deleted" : "") + '.';
+    confirmModal(msg, function(){
+      if (b.isFolder){
+        state.boards.forEach(function(bb){ if (bb.parentId === id) bb.parentId = null; });
+      } else {
+        state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
+      }
+      state.boards = state.boards.filter(function(bb){ return bb.id !== id; });
+      state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
+      state.attendanceBoardIds = (state.attendanceBoardIds || []).filter(function(bid){ return bid !== id; });
+      state.mailingListBoardIds = (state.mailingListBoardIds || []).filter(function(bid){ return bid !== id; });
+      if (state.boardFilter === id) state.boardFilter = null;
+      saveState(); render();
+    }, { title: "Delete board?" });
+  },
+  "pick-color": function(t){
+    document.querySelectorAll("#color-palette .color-swatch").forEach(function(s){ s.classList.remove("selected"); });
+    t.classList.add("selected");
+    document.getElementById("color-input").value = t.getAttribute("data-color");
+  },
+  "add-subcat-row": function(){
+    var wrap = document.getElementById("subcat-rows");
+    if (!wrap) return;
+    var holder = document.createElement("div");
+    holder.innerHTML = subcatRowHTML("", "");
+    var row = holder.firstChild;
+    wrap.appendChild(row);
+    row.querySelector(".subcat-name-input").focus();
+  },
+  "remove-subcat-row": function(t){
+    var row = t.closest("[data-subcat-row]");
+    if (row) row.remove();
+  },
+  "submit-board-form": function(form){
+    var fd = new FormData(form);
+    var id = form.getAttribute("data-id");
+    var name = (fd.get("name")||"").toString().trim();
+    var color = (fd.get("color")||"#13294B").toString();
+    var isFolder = fd.get("isFolder") === "on";
+    var parentId = isFolder ? null : ((fd.get("parentId")||"").toString() || null);
+    if (!name) return;
+    var subcategories = [];
+    form.querySelectorAll("[data-subcat-row]").forEach(function(row){
+      var scName = row.querySelector(".subcat-name-input").value.trim();
+      if (!scName) return;
+      subcategories.push({ id: row.getAttribute("data-subcat-id") || uid(), name: scName });
+    });
+    if (id){
+      var b = boardById(id);
+      b.name = name; b.color = color; b.isFolder = isFolder; b.parentId = parentId;
+      if (isFolder){
+        state.events.forEach(function(e){ if (e.boardId === id) e.boardId = null; });
+        state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
+        state.attendanceBoardIds = (state.attendanceBoardIds || []).filter(function(bid){ return bid !== id; });
+        state.mailingListBoardIds = (state.mailingListBoardIds || []).filter(function(bid){ return bid !== id; });
+      }
+      var keepIds = {};
+      subcategories.forEach(function(sc){ keepIds[sc.id] = true; });
+      state.events.forEach(function(e){
+        if (e.boardId === id && e.subcategoryId && !keepIds[e.subcategoryId]) e.subcategoryId = null;
+      });
+      b.subcategories = subcategories;
+    } else {
+      state.boards.push({ id: uid(), name: name, color: color, isFolder: isFolder, parentId: parentId, subcategories: subcategories });
+    }
+    saveState(); closeModal(); render();
+  },
+
+  "nav-month": function(t){
+    var dir = parseInt(t.getAttribute("data-dir"), 10);
+    var parts = (state.calendarCursor || todayISO().slice(0,7)).split("-").map(Number);
+    var d = new Date(parts[0], parts[1]-1 + dir, 1);
+    state.calendarCursor = d.getFullYear() + "-" + pad(d.getMonth()+1);
+    saveState(); render();
+  },
+  "nav-today": function(){ state.calendarCursor = todayISO().slice(0,7); saveState(); render(); },
+
+  "add-event": function(t){
+    var date = t.getAttribute("data-date") || todayISO();
+    var filterBoard = state.boardFilter && state.boardFilter !== "uncategorized" ? boardById(state.boardFilter) : null;
+    var boardId = t.getAttribute("data-board") || ((filterBoard && !filterBoard.isFolder) ? filterBoard.id : "");
+    if (!boardId && t.getAttribute("data-context") === "budget"){
+      boardId = (state.budgetBoardIds || [])[0] || "";
+    }
+    openModal(eventModalHTML(null, date, boardId));
+  },
+  "edit-event": function(t){ openModal(eventModalHTML(t.getAttribute("data-id"))); },
+  "submit-event-form": function(form){
+    var fd = new FormData(form);
+    var id = form.getAttribute("data-id");
+    var title = (fd.get("title")||"").toString().trim();
+    var date = (fd.get("date")||"").toString();
+    var endDateRaw = (fd.get("endDate")||"").toString();
+    var endDate = (endDateRaw && endDateRaw > date) ? endDateRaw : null;
+    var boardId = (fd.get("boardId")||"").toString() || null;
+    var subcategoryId = (fd.get("subcategoryId")||"").toString() || null;
+    var notes = (fd.get("notes")||"").toString();
+    if (!title || !date) return;
+    if (id){
+      var e = eventById(id);
+      e.title = title; e.date = date; e.endDate = endDate; e.boardId = boardId; e.subcategoryId = subcategoryId; e.notes = notes;
+    } else {
+      state.events.push({ id: uid(), title: title, date: date, endDate: endDate, boardId: boardId, subcategoryId: subcategoryId, notes: notes, attendeeIds: [], budgetItems: [] });
+    }
+    if (state.currentView === "budget" && boardId){
+      state.budgetBoardIds = state.budgetBoardIds || [];
+      if (state.budgetBoardIds.indexOf(boardId) === -1) state.budgetBoardIds.push(boardId);
+    }
+    state.calendarCursor = date.slice(0, 7);
+    saveState(); closeModal(); render();
+  },
+  "delete-event": function(t){
+    var id = t.getAttribute("data-id");
+    var e = eventById(id);
+    if (!e) return;
+    confirmModal('Delete "' + e.title + '"? This removes its attendance and budget data too.', function(){
+      state.events = state.events.filter(function(ev){ return ev.id !== id; });
+      if (ui.attendanceSession === id) ui.attendanceSession = "directory";
+      if (ui.budgetDetailId === id){ ui.budgetDetailId = null; ui.budgetTab = "overview"; }
+      saveState(); render();
+    }, { title: "Delete event?" });
+  },
+
+  "close-modal": function(){ closeModal(); },
+  "close-modal-overlay": function(t, ev){ if (ev.target === t) closeModal(); },
+
+  "attendance-select": function(t){ ui.attendanceSession = t.getAttribute("data-id"); render(); },
+  "add-new-attendee": function(t){ openModal(attendeeModalHTML(t.getAttribute("data-id"))); },
+  "add-participant": function(){ openModal(attendeeModalHTML(null)); },
+  "add-existing-attendee": function(t){ openModal(existingAttendeeModalHTML(t.getAttribute("data-id"))); },
+  "submit-new-attendee": function(form){
+    var fd = new FormData(form);
+    var eventId = form.getAttribute("data-event");
+    var firstName = (fd.get("firstName")||"").toString().trim();
+    var lastName = (fd.get("lastName")||"").toString().trim();
+    if (!firstName) return;
+    var p = { id: uid(), firstName: firstName, lastName: lastName, school: (fd.get("school")||"").toString(), email: (fd.get("email")||"").toString(), iein: (fd.get("iein")||"").toString(), custom: {} };
+    state.participants.push(p);
+    var ev = eventById(eventId);
+    if (ev){ ev.attendeeIds = ev.attendeeIds || []; ev.attendeeIds.push(p.id); }
+    saveState(); closeModal(); render();
+  },
+  "enroll-existing": function(t){
+    var eventId = t.getAttribute("data-event");
+    var participantId = t.getAttribute("data-participant");
+    var ev = eventById(eventId);
+    if (ev){
+      ev.attendeeIds = ev.attendeeIds || [];
+      if (ev.attendeeIds.indexOf(participantId) === -1) ev.attendeeIds.push(participantId);
+    }
+    saveState(); closeModal(); render();
+  },
+  "remove-attendance": function(t){
+    var eventId = t.getAttribute("data-event");
+    var participantId = t.getAttribute("data-participant");
+    var ev = eventById(eventId);
+    if (ev) ev.attendeeIds = (ev.attendeeIds||[]).filter(function(id){ return id !== participantId; });
+    saveState(); render();
+  },
+  "delete-participant": function(t){
+    var id = t.getAttribute("data-id");
+    var p = participantById(id);
+    if (!p) return;
+    confirmModal('Remove "' + fullName(p) + '" from the directory and every session?', function(){
+      state.participants = state.participants.filter(function(pp){ return pp.id !== id; });
+      state.events.forEach(function(e){ e.attendeeIds = (e.attendeeIds||[]).filter(function(pid){ return pid !== id; }); });
+      saveState(); render();
+    }, { title: "Remove participant?" });
+  },
+  "view-participant": function(t){ openModal(participantDetailModalHTML(t.getAttribute("data-id")), true); },
+  "goto-session": function(t){ ui.attendanceSession = t.getAttribute("data-id"); closeModal(); render(); },
+  "add-field": function(){ openModal(addFieldModalHTML()); },
+  "submit-add-field": function(form){
+    var fd = new FormData(form);
+    var name = (fd.get("fieldName")||"").toString().trim();
+    if (!name) return;
+    var exists = state.customFields.some(function(f){ return f.toLowerCase() === name.toLowerCase(); });
+    if (!exists) state.customFields.push(name);
+    saveState(); closeModal(); render();
+  },
+  "delete-field": function(t){
+    var field = t.getAttribute("data-field");
+    confirmModal('Remove the "' + field + '" field from every participant? This can\'t be undone.', function(){
+      state.customFields = state.customFields.filter(function(f){ return f !== field; });
+      state.participants.forEach(function(p){ if (p.custom) delete p.custom[field]; });
+      saveState(); render();
+    }, { title: "Remove field?" });
+  },
+  "export-participants": function(){ exportParticipantsCSV(); },
+  "export-session-attendance": function(t){
+    var session = eventById(t.getAttribute("data-id"));
+    if (session) exportSessionAttendanceCSV(session);
+  },
+  "export-all-attendance": function(){ exportAllAttendanceCSV(); },
+  "remove-attendance-board": function(t){
+    var id = t.getAttribute("data-id");
+    state.attendanceBoardIds = (state.attendanceBoardIds || []).filter(function(bid){ return bid !== id; });
+    var currentSession = ui.attendanceSession !== "directory" ? eventById(ui.attendanceSession) : null;
+    if (currentSession && currentSession.boardId === id) ui.attendanceSession = "directory";
+    saveState(); render();
+  },
+  "import-file": function(){
+    var input = document.getElementById("file-import-input");
+    input.value = "";
+    input.click();
+  },
+
+  "remove-mailinglist-board": function(t){
+    var id = t.getAttribute("data-id");
+    state.mailingListBoardIds = (state.mailingListBoardIds || []).filter(function(bid){ return bid !== id; });
+    if (ui.mailingListBoardId === id) ui.mailingListBoardId = null;
+    saveState(); render();
+  },
+  "mailinglist-select-board": function(t){
+    ui.mailingListBoardId = t.getAttribute("data-id");
+    ui.mailingListDomain = "all";
+    render();
+  },
+  "mailinglist-select-domain": function(t){
+    ui.mailingListDomain = t.getAttribute("data-domain");
+    render();
+  },
+  "add-subscriber": function(){
+    if (!ui.mailingListBoardId) return;
+    openModal(subscriberModalHTML(ui.mailingListBoardId));
+  },
+  "submit-subscriber-form": function(form){
+    var fd = new FormData(form);
+    var boardId = form.getAttribute("data-board");
+    var board = boardById(boardId);
+    if (!board) return;
+    var email = (fd.get("email")||"").toString().trim();
+    if (!email) return;
+    board.subscribers = board.subscribers || [];
+    board.subscribers.push({
+      id: uid(),
+      firstName: (fd.get("firstName")||"").toString().trim(),
+      lastName: (fd.get("lastName")||"").toString().trim(),
+      email: email
+    });
+    saveState(); closeModal(); render();
+  },
+  "remove-subscriber": function(t){
+    var board = boardById(t.getAttribute("data-board"));
+    if (!board) return;
+    var id = t.getAttribute("data-id");
+    confirmModal("Remove this subscriber from the mailing list?", function(){
+      board.subscribers = (board.subscribers||[]).filter(function(s){ return s.id !== id; });
+      saveState(); render();
+    }, { title: "Remove subscriber?" });
+  },
+  "mailinglist-import-file": function(){
+    var input = document.getElementById("mailinglist-import-input");
+    input.value = "";
+    input.click();
+  },
+  "export-mailinglist": function(){ exportMailingListCSV(); },
+
+  "budget-tab": function(t){ ui.budgetTab = t.getAttribute("data-tab"); render(); },
+  "budget-detail": function(t){ ui.budgetTab = "detail"; ui.budgetDetailId = t.getAttribute("data-id"); render(); },
+  "add-budget-row": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    if (!ev) return;
+    ev.budgetItems = ev.budgetItems || [];
+    ev.budgetItems.push({ id: uid(), general: "", company: "", funds: "", cfoap: "", orderDate: "", qty: 1, unitCost: 0, shipping: 0 });
+    saveState(); render();
+  },
+  "remove-budget-row": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    if (!ev) return;
+    ev.budgetItems = (ev.budgetItems||[]).filter(function(item){ return item.id !== t.getAttribute("data-item"); });
+    saveState(); render();
+  },
+
+  "add-budget-category": function(){
+    state.proposedBudget = state.proposedBudget || { categories: [] };
+    var cat = { id: uid(), name: "", collapsed: false, subtopics: [] };
+    state.proposedBudget.categories.push(cat);
+    saveState(); render();
+    setTimeout(function(){
+      var el = document.querySelector('.pb-category-name[data-category="' + cat.id + '"]');
+      if (el) el.focus();
+    }, 30);
+  },
+  "remove-budget-category": function(t){
+    var id = t.getAttribute("data-category");
+    var cat = (state.proposedBudget.categories||[]).find(function(c){ return c.id === id; });
+    if (!cat) return;
+    confirmModal('Delete "' + (cat.name || "this category") + '" and all its subtopics? This can\'t be undone.', function(){
+      state.proposedBudget.categories = state.proposedBudget.categories.filter(function(c){ return c.id !== id; });
+      saveState(); render();
+    }, { title: "Delete category?" });
+  },
+  "toggle-budget-category": function(t){
+    var cat = (state.proposedBudget.categories||[]).find(function(c){ return c.id === t.getAttribute("data-id"); });
+    if (!cat) return;
+    cat.collapsed = !cat.collapsed;
+    saveState(); render();
+  },
+  "add-budget-subtopic": function(t){
+    var cat = (state.proposedBudget.categories||[]).find(function(c){ return c.id === t.getAttribute("data-category"); });
+    if (!cat) return;
+    cat.collapsed = false;
+    cat.subtopics = cat.subtopics || [];
+    var sub = { id: uid(), name: "", amount: 0 };
+    cat.subtopics.push(sub);
+    saveState(); render();
+    setTimeout(function(){
+      var el = document.querySelector('[data-proposed-field="name"][data-subtopic="' + sub.id + '"]');
+      if (el) el.focus();
+    }, 30);
+  },
+  "remove-budget-subtopic": function(t){
+    var cat = (state.proposedBudget.categories||[]).find(function(c){ return c.id === t.getAttribute("data-category"); });
+    if (!cat) return;
+    cat.subtopics = (cat.subtopics||[]).filter(function(s){ return s.id !== t.getAttribute("data-subtopic"); });
+    saveState(); render();
+  }
+};
+
+/* ============================================================
+   Global click delegation
+   ============================================================ */
+function runAction(action, arg1, arg2){
+  if (!ACTIONS[action]) return;
+  try{
+    ACTIONS[action](arg1, arg2);
+  }catch(err){
+    console.error("Action \"" + action + "\" failed:", err);
+    document.getElementById("modal-root").innerHTML =
+      '<div class="modal-overlay" data-action="close-modal-overlay">' +
+        '<div class="modal" data-stop="1">' +
+          '<div class="modal-header"><h3>Something went wrong</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+          '<div class="modal-body"><p style="margin:0 0 10px;color:var(--text);line-height:1.5;">This action hit an unexpected error and did not complete:</p>' +
+          '<pre style="white-space:pre-wrap;background:#F8FAFC;border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;color:#DC2626;">' + esc(err && err.message ? err.message : String(err)) + '</pre></div>' +
+          '<div class="modal-footer"><button type="button" class="btn btn-primary" data-action="close-modal">OK</button></div>' +
+        '</div>' +
+      '</div>';
+  }
+}
+
+document.addEventListener("click", function(e){
+  var el = e.target.closest("[data-action]");
+  if (!el) return;
+  var action = el.getAttribute("data-action");
+  if (action === "close-modal-overlay"){ runAction(action, el, e); return; }
+  if (el.tagName === "A") e.preventDefault();
+  runAction(action, el, e);
+});
+
+document.addEventListener("submit", function(e){
+  var form = e.target.closest("form[data-submit-action]");
+  if (!form) return;
+  e.preventDefault();
+  var action = form.getAttribute("data-submit-action");
+  runAction(action, form);
+});
+
+/* Live field edits: participant fields + budget line items */
+document.addEventListener("input", function(e){
+  var t = e.target;
+  if (t.matches("[data-participant][data-field]")){
+    var p = participantById(t.getAttribute("data-participant"));
+    if (p) p[t.getAttribute("data-field")] = t.value;
+    saveState();
+    if (t.getAttribute("data-field") === "name" || t.getAttribute("data-field") === "school"){
+      // no live re-render needed; sidebar/upcoming don't show participant fields
+    }
+  } else if (t.matches("[data-participant][data-customfield]")){
+    var p2 = participantById(t.getAttribute("data-participant"));
+    if (p2){ p2.custom = p2.custom || {}; p2.custom[t.getAttribute("data-customfield")] = t.value; }
+    saveState();
+  } else if (t.matches("[data-budget-field]")){
+    var ev = eventById(t.getAttribute("data-event"));
+    var item = ev ? (ev.budgetItems||[]).find(function(i){ return i.id === t.getAttribute("data-item"); }) : null;
+    if (item){
+      var field = t.getAttribute("data-budget-field");
+      var numericFields = { qty: 1, unitCost: 1, shipping: 1 };
+      item[field] = numericFields[field] ? (parseFloat(t.value) || 0) : t.value;
+      if (numericFields[field]){
+        var itemTotals = budgetItemTotals(item);
+        var totalEl = document.querySelector('[data-item-total="' + item.id + '"]');
+        var totalCostEl = document.querySelector('[data-item-total-cost="' + item.id + '"]');
+        if (totalEl) totalEl.textContent = fmtMoney(itemTotals.total);
+        if (totalCostEl) totalCostEl.textContent = fmtMoney(itemTotals.totalCost);
+        var tt = budgetTotals(ev);
+        var totalRowEl = document.getElementById("bt-total");
+        if (totalRowEl) totalRowEl.textContent = fmtMoney(tt.total);
+      }
+    }
+    saveState();
+  } else if (t.matches("[data-subscriber-field]")){
+    var board2 = boardById(t.getAttribute("data-board"));
+    var subscriber = board2 ? (board2.subscribers||[]).find(function(s){ return s.id === t.getAttribute("data-subscriber"); }) : null;
+    if (subscriber) subscriber[t.getAttribute("data-subscriber-field")] = t.value;
+    saveState();
+  } else if (t.matches("[data-proposed-field]")){
+    var pbCat = (state.proposedBudget.categories||[]).find(function(c){ return c.id === t.getAttribute("data-category"); });
+    if (pbCat){
+      var subId = t.getAttribute("data-subtopic");
+      var field = t.getAttribute("data-proposed-field");
+      if (subId){
+        var pbSub = (pbCat.subtopics||[]).find(function(s){ return s.id === subId; });
+        if (pbSub){
+          pbSub[field] = field === "amount" ? (parseFloat(t.value) || 0) : t.value;
+          if (field === "amount"){
+            var catTotalEl = document.querySelector('[data-category-total="' + pbCat.id + '"]');
+            if (catTotalEl) catTotalEl.textContent = fmtMoney(proposedCategoryTotal(pbCat));
+            var grandEl = document.getElementById("pb-grand-total");
+            if (grandEl) grandEl.textContent = fmtMoney(proposedBudgetGrandTotal());
+          }
+        }
+      } else {
+        pbCat[field] = t.value;
+      }
+    }
+    saveState();
+  }
+});
+document.addEventListener("change", function(e){
+  var t = e.target;
+  if (t.matches("#event-form select[name='boardId']")){
+    var wrap = document.getElementById("subcat-wrap");
+    if (wrap) wrap.innerHTML = subcategoryFieldHTML(boardById(t.value), null);
+  } else if (t.matches("#add-budget-board-select")){
+    if (t.value){
+      state.budgetBoardIds = state.budgetBoardIds || [];
+      state.budgetBoardIds.push(t.value);
+      saveState(); render();
+    }
+  } else if (t.matches("#add-attendance-board-select")){
+    if (t.value){
+      state.attendanceBoardIds = state.attendanceBoardIds || [];
+      state.attendanceBoardIds.push(t.value);
+      saveState(); render();
+    }
+  } else if (t.matches("#add-mailinglist-board-select")){
+    if (t.value){
+      state.mailingListBoardIds = state.mailingListBoardIds || [];
+      state.mailingListBoardIds.push(t.value);
+      ui.mailingListBoardId = t.value;
+      saveState(); render();
+    }
+  }
+  if (t.id === "board-is-folder"){
+    var parentField = document.getElementById("board-parent-field");
+    if (parentField) parentField.hidden = t.checked;
+  }
+});
+
+/* ============================================================
+   Spreadsheet import
+   ============================================================ */
+var FIRSTNAME_HEADERS = ["firstname","fname","first"];
+var LASTNAME_HEADERS = ["lastname","lname","last","surname"];
+var NAME_HEADERS = ["name","fullname","participantname","teachername","attendeename"];
+var SCHOOL_HEADERS = ["school","schoolname","district","organization","institution","site"];
+var EMAIL_HEADERS = ["email","emailaddress"];
+var IEIN_HEADERS = ["iein","ieinnumber","educatorid","illinoiseducatorid"];
+var IGNORED_HEADERS = ["totalsessions","totalnumberofsessions","sessionsattended","sessioncount","numberofsessions","sessions"];
+
+function normHeader(h){ return String(h||"").toLowerCase().trim().replace(/[^a-z0-9]/g, ""); }
+function matchCanonical(h){
+  var n = normHeader(h);
+  if (FIRSTNAME_HEADERS.indexOf(n) !== -1) return "firstName";
+  if (LASTNAME_HEADERS.indexOf(n) !== -1) return "lastName";
+  if (NAME_HEADERS.indexOf(n) !== -1) return "name";
+  if (SCHOOL_HEADERS.indexOf(n) !== -1) return "school";
+  if (EMAIL_HEADERS.indexOf(n) !== -1) return "email";
+  if (IEIN_HEADERS.indexOf(n) !== -1) return "iein";
+  if (IGNORED_HEADERS.indexOf(n) !== -1) return "ignore";
+  return null;
+}
+
+function parseCSV(text){
+  var rows = [], row = [], field = "", inQuotes = false;
+  for (var i = 0; i < text.length; i++){
+    var c = text[i];
+    if (inQuotes){
+      if (c === '"'){
+        if (text[i+1] === '"'){ field += '"'; i++; } else { inQuotes = false; }
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ","){ row.push(field); field = ""; }
+      else if (c === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c === "\r"){ /* skip */ }
+      else field += c;
+    }
+  }
+  if (field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+  return rows.filter(function(r){ return !(r.length === 1 && r[0].trim() === ""); });
+}
+
+function importRows(headerRow, dataRows, targetSessionId){
+  var mapping = headerRow.map(function(h){ return { header: String(h||"").trim(), canon: matchCanonical(h) }; });
+  mapping.forEach(function(m){
+    if (!m.canon && m.header){
+      var exists = state.customFields.some(function(f){ return f.toLowerCase() === m.header.toLowerCase(); });
+      if (!exists) state.customFields.push(m.header);
+    }
+  });
+  var count = 0;
+  dataRows.forEach(function(r){
+    if (!r || r.every(function(c){ return String(c===undefined?"":c).trim() === ""; })) return;
+    var rec = { firstName: "", lastName: "", name: "", school: "", email: "", iein: "", custom: {} };
+    mapping.forEach(function(m, idx){
+      var val = r[idx] !== undefined ? String(r[idx]).trim() : "";
+      if (m.canon === "ignore"){ /* known field, not imported (e.g. a computed session count) */ }
+      else if (m.canon) rec[m.canon] = val;
+      else if (m.header) rec.custom[m.header] = val;
+    });
+    if (!rec.firstName && !rec.lastName && rec.name){
+      var parts = rec.name.split(/\s+/).filter(Boolean);
+      if (parts.length > 1){ rec.lastName = parts.pop(); rec.firstName = parts.join(" "); }
+      else rec.firstName = rec.name;
+    }
+    if (!rec.firstName && !rec.lastName && !rec.email) return;
+    var recFull = (rec.firstName + " " + rec.lastName).trim().toLowerCase();
+    var existing = null;
+    if (rec.email) existing = state.participants.find(function(p){ return p.email && p.email.toLowerCase() === rec.email.toLowerCase(); });
+    if (!existing && recFull) existing = state.participants.find(function(p){ return fullName(p).toLowerCase() === recFull && (p.school||"").toLowerCase() === (rec.school||"").toLowerCase(); });
+    var target;
+    if (existing){
+      if (rec.firstName) existing.firstName = rec.firstName;
+      if (rec.lastName) existing.lastName = rec.lastName;
+      if (rec.school) existing.school = rec.school;
+      if (rec.email) existing.email = rec.email;
+      if (rec.iein) existing.iein = rec.iein;
+      existing.custom = existing.custom || {};
+      Object.keys(rec.custom).forEach(function(k){ if (rec.custom[k]) existing.custom[k] = rec.custom[k]; });
+      target = existing;
+    } else {
+      target = { id: uid(), firstName: rec.firstName, lastName: rec.lastName, school: rec.school, email: rec.email, iein: rec.iein, custom: rec.custom };
+      state.participants.push(target);
+    }
+    if (targetSessionId){
+      var ev = eventById(targetSessionId);
+      if (ev){ ev.attendeeIds = ev.attendeeIds || []; if (ev.attendeeIds.indexOf(target.id) === -1) ev.attendeeIds.push(target.id); }
+    }
+    count++;
+  });
+  saveState(); render();
+  alertModal("Imported " + count + " participant" + (count === 1 ? "" : "s") + ".", "Import complete");
+}
+
+function readSpreadsheetRows(file, callback){
+  var ext = file.name.split(".").pop().toLowerCase();
+  if (ext === "csv"){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var rows = parseCSV(e.target.result);
+      if (rows.length) callback(rows[0], rows.slice(1));
+    };
+    reader.readAsText(file);
+  } else if (ext === "xlsx" || ext === "xls"){
+    if (typeof XLSX === "undefined"){
+      alertModal("The spreadsheet reader could not load (no internet connection?). Please use a CSV file instead.", "Import unavailable");
+      return;
+    }
+    var reader2 = new FileReader();
+    reader2.onload = function(e){
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, { type: "array" });
+      var sheet = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      if (rows.length) callback(rows[0], rows.slice(1));
+    };
+    reader2.readAsArrayBuffer(file);
+  } else {
+    alertModal("Unsupported file type. Please upload a .csv, .xlsx, or .xls file.", "Import unavailable");
+  }
+}
+
+function handleImportFile(file){
+  var targetSessionId = (ui.attendanceSession && ui.attendanceSession !== "directory") ? ui.attendanceSession : null;
+  readSpreadsheetRows(file, function(headerRow, dataRows){ importRows(headerRow, dataRows, targetSessionId); });
+}
+document.getElementById("file-import-input").addEventListener("change", function(e){
+  var file = e.target.files && e.target.files[0];
+  if (file) handleImportFile(file);
+});
+
+function importMailingListRows(headerRow, dataRows, boardId){
+  var board = boardById(boardId);
+  if (!board) return;
+  var mapping = headerRow.map(function(h){ return { header: String(h||"").trim(), canon: matchCanonical(h) }; });
+  board.subscribers = board.subscribers || [];
+  var count = 0;
+  dataRows.forEach(function(r){
+    if (!r || r.every(function(c){ return String(c===undefined?"":c).trim() === ""; })) return;
+    var rec = { firstName: "", lastName: "", name: "", email: "" };
+    mapping.forEach(function(m, idx){
+      var val = r[idx] !== undefined ? String(r[idx]).trim() : "";
+      if (m.canon === "firstName" || m.canon === "lastName" || m.canon === "name" || m.canon === "email") rec[m.canon] = val;
+    });
+    if (!rec.firstName && !rec.lastName && rec.name){
+      var parts = rec.name.split(/\s+/).filter(Boolean);
+      if (parts.length > 1){ rec.lastName = parts.pop(); rec.firstName = parts.join(" "); }
+      else rec.firstName = rec.name;
+    }
+    if (!rec.email) return;
+    var existing = board.subscribers.find(function(s){ return (s.email||"").toLowerCase() === rec.email.toLowerCase(); });
+    if (existing){
+      if (rec.firstName) existing.firstName = rec.firstName;
+      if (rec.lastName) existing.lastName = rec.lastName;
+    } else {
+      board.subscribers.push({ id: uid(), firstName: rec.firstName, lastName: rec.lastName, email: rec.email });
+    }
+    count++;
+  });
+  saveState(); render();
+  alertModal("Imported " + count + " subscriber" + (count === 1 ? "" : "s") + ".", "Import complete");
+}
+
+function handleMailingListImportFile(file){
+  var boardId = ui.mailingListBoardId;
+  if (!boardId) return;
+  readSpreadsheetRows(file, function(headerRow, dataRows){ importMailingListRows(headerRow, dataRows, boardId); });
+}
+document.getElementById("mailinglist-import-input").addEventListener("change", function(e){
+  var file = e.target.files && e.target.files[0];
+  if (file) handleMailingListImportFile(file);
+});
+
+function csvEscape(v){
+  v = String(v === undefined || v === null ? "" : v);
+  return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+}
+function exportParticipantsCSV(){
+  var headers = ["First Name","Last Name","School","Email","IEIN"].concat(state.customFields).concat(["Total Sessions"]);
+  var rows = [headers];
+  sortedParticipants(state.participants).forEach(function(p){
+    var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
+    var row = [p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
+    state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
+    row.push(sessionCount);
+    rows.push(row);
+  });
+  var csv = rows.map(function(r){ return r.map(csvEscape).join(","); }).join("\n");
+  var blob = new Blob([csv], { type: "text/csv" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = "participants_export.csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadCSVRows(rows, filename){
+  var csv = rows.map(function(r){ return r.map(csvEscape).join(","); }).join("\n");
+  var blob = new Blob([csv], { type: "text/csv" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function slugify(s){
+  return String(s||"").trim().replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "").toLowerCase() || "session";
+}
+
+function sessionAttendanceRows(session){
+  var attendees = sortedParticipants((session.attendeeIds || []).map(participantById).filter(Boolean));
+  return attendees.map(function(p){
+    var row = [session.title, eventDateRangeLabel(session), p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
+    state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
+    return row;
+  });
+}
+
+function exportSessionAttendanceCSV(session){
+  var headers = ["Session","Date","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
+  var rows = [headers].concat(sessionAttendanceRows(session));
+  downloadCSVRows(rows, "attendance_" + slugify(session.title) + ".csv");
+}
+
+function exportAllAttendanceCSV(){
+  var headers = ["Session","Date","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
+  var sessions = sortedEvents().filter(function(e){ return attendanceBoardIds().indexOf(e.boardId) !== -1; });
+  var rows = [headers];
+  sessions.forEach(function(session){
+    rows = rows.concat(sessionAttendanceRows(session));
+  });
+  downloadCSVRows(rows, "attendance_all_sessions.csv");
+}
+
+function exportMailingListCSV(){
+  var board = boardById(ui.mailingListBoardId);
+  if (!board) return;
+  var subscribers = board.subscribers || [];
+  if (ui.mailingListDomain !== "all") subscribers = subscribers.filter(function(s){ return subscriberDomain(s.email) === ui.mailingListDomain; });
+  var rows = [["First Name","Last Name","Email"]].concat(subscribers.map(function(s){ return [s.firstName||"", s.lastName||"", s.email||""]; }));
+  var suffix = ui.mailingListDomain === "all" ? "all" : ui.mailingListDomain.replace(/[^a-z0-9.]+/gi, "_");
+  downloadCSVRows(rows, "mailing_list_" + slugify(board.name) + "_" + suffix + ".csv");
+}
+
+/* ============================================================
+   Backup export / import
+   ============================================================ */
+function downloadBackupJSON(){
+  var payload = { app: "dpi-teacher-calendar", exportedAt: new Date().toISOString(), state: state };
+  var json = JSON.stringify(payload, null, 2);
+  var blob = new Blob([json], { type: "application/json" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = "dpi_calendar_backup_" + todayISO() + ".json";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function handleBackupFile(file){
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var parsed;
+    try{
+      parsed = JSON.parse(e.target.result);
+    }catch(err){
+      alertModal("That file isn't valid JSON. Please choose a backup file exported from this app.", "Import failed");
+      return;
+    }
+    var restored = (parsed && parsed.state && typeof parsed.state === "object") ? parsed.state : parsed;
+    if (!restored || !Array.isArray(restored.boards) || !Array.isArray(restored.events)){
+      alertModal("That file doesn't look like a calendar backup. Please choose a JSON file exported with \"Export backup\".", "Import failed");
+      return;
+    }
+    confirmModal("This will replace everything currently in the calendar (boards, events, participants, budgets) with the contents of this backup file. This can't be undone. Continue?", function(){
+      state = ensureDefaults(restored);
+      state.participants.forEach(migrateParticipant);
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all" };
+      saveState(); render();
+      alertModal("Backup restored successfully.", "Import complete");
+    }, { title: "Restore backup?", confirmLabel: "Restore backup" });
+  };
+  reader.readAsText(file);
+}
+document.getElementById("backup-import-input").addEventListener("change", function(e){
+  var file = e.target.files && e.target.files[0];
+  if (file) handleBackupFile(file);
+});
+
+/* ============================================================
+   Auth gate + cloud sync
+   ============================================================ */
+function showAuthGate(message, showSignOut){
+  document.getElementById("app").style.display = "none";
+  document.getElementById("auth-gate").style.display = "flex";
+  document.getElementById("auth-message").textContent = message;
+  document.getElementById("auth-signin-btn").style.display = showSignOut ? "none" : "";
+  document.getElementById("auth-signout-btn").style.display = showSignOut ? "" : "none";
+}
+
+function hideAuthGate(){
+  document.getElementById("auth-gate").style.display = "none";
+  document.getElementById("app").style.display = "";
+}
+
+function startCloudSync(){
+  showAuthGate("Loading the shared calendar…", false);
+  stateDocRef.get().then(function(snap){
+    if (snap.exists){
+      state = buildState(snap.data());
+    } else {
+      state = buildState(null);
+      persist(state, 0);
+    }
+    hideAuthGate();
+    render();
+    listenForRemoteUpdates();
+  }).catch(function(err){
+    console.error("Could not load the shared calendar.", err);
+    showAuthGate("Couldn't load the shared calendar (" + err.message + "). Check your internet connection and reload the page.", true);
+  });
+}
+
+function listenForRemoteUpdates(){
+  remoteUnsubscribe = stateDocRef.onSnapshot({ includeMetadataChanges: true }, function(snap){
+    if (snap.metadata.hasPendingWrites || !snap.exists) return;
+    applyingRemoteUpdate = true;
+    state = buildState(snap.data());
+    render();
+    applyingRemoteUpdate = false;
+  }, function(err){
+    console.error("Lost connection to the shared calendar.", err);
+  });
+}
+
+document.getElementById("auth-signin-btn").addEventListener("click", function(){
+  var provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(function(err){
+    console.error("Sign-in failed", err);
+    showAuthGate("Sign-in failed (" + err.message + "). Please try again.", false);
+  });
+});
+document.getElementById("auth-signout-btn").addEventListener("click", function(){
+  if (remoteUnsubscribe){ remoteUnsubscribe(); remoteUnsubscribe = null; }
+  auth.signOut();
+});
+
+auth.onAuthStateChanged(function(user){
+  if (remoteUnsubscribe){ remoteUnsubscribe(); remoteUnsubscribe = null; }
+  if (!user){
+    currentUserEmail = "";
+    showAuthGate("Sign in with your Google account to access the shared calendar.", false);
+    return;
+  }
+  var email = (user.email || "").toLowerCase();
+  var allowed = ALLOWED_EMAILS.map(function(e){ return e.toLowerCase(); }).indexOf(email) !== -1;
+  if (!allowed){
+    currentUserEmail = "";
+    showAuthGate("Signed in as " + user.email + ", but this account isn't on the access list for this calendar. Ask an owner to add you, or sign out and try a different account.", true);
+    return;
+  }
+  currentUserEmail = user.email;
+  startCloudSync();
+});
+
+})();
+</script>
+</body>
+</html>
