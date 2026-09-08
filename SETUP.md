@@ -89,6 +89,11 @@ account with a new password).
 
 ## Notes
 
+- Which tab, calendar month, and board filter you're looking at is kept
+  local to your own browser (not synced) — switching screens on one
+  person's device never changes what anyone else is looking at. Actual
+  data edits (events, budgets, attendance, etc.) still sync live to
+  everyone.
 - The free ("Spark") Firebase plan comfortably covers a small team's
   usage — no billing setup required.
 - The `apiKey` in `index.html` is meant to be public for Firebase web
