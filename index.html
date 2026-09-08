@@ -331,6 +331,14 @@ td.budget-indent{padding-left:24px;}
 .side-list-item.active .sub{color:rgba(255,255,255,0.7);}
 .content-col{flex:1;min-width:0;}
 
+.att-group{margin-bottom:4px;}
+.att-group-header{display:flex;align-items:center;gap:6px;padding:8px 6px;border-radius:8px;cursor:default;}
+.att-group-header:hover{background:var(--bg);}
+.att-group-toggle{border:none;background:none;color:var(--text-muted);font-size:12px;cursor:pointer;padding:2px 4px;flex-shrink:0;}
+.att-group-label{flex:1;font-weight:700;font-size:12.5px;font-family:var(--font-heading);color:var(--text);}
+.att-group-count{font-weight:400;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);}
+.att-session-item{margin-left:16px;}
+
 .tabs{display:flex;gap:4px;background:#EEF1F7;padding:4px;border-radius:10px;width:fit-content;margin-bottom:16px;}
 .tabs button{border:none;background:transparent;padding:8px 16px;border-radius:8px;font-weight:600;font-size:13px;color:var(--text-muted);}
 .tabs button.active{background:#fff;color:var(--blue-800);box-shadow:var(--shadow);}
@@ -524,6 +532,26 @@ function seedProposedBudgetIfNeeded(s){
   return s;
 }
 
+function seedSummerSubcategoriesIfNeeded(s){
+  if (s.summerSubcategoriesSeeded) return s;
+  var board = s.boards.find(function(b){ return b.id === "board-summer"; });
+  if (board){
+    board.subcategories = board.subcategories || [];
+    var si26 = board.subcategories.find(function(sc){ return sc.name === "SI 26"; });
+    var si27 = board.subcategories.find(function(sc){ return sc.name === "SI 27 Workshops"; });
+    if (!si26){ si26 = { id: uid(), name: "SI 26" }; board.subcategories.push(si26); }
+    if (!si27){ si27 = { id: uid(), name: "SI 27 Workshops" }; board.subcategories.push(si27); }
+    s.events.forEach(function(e){
+      if (e.boardId !== "board-summer" || e.subcategoryId) return;
+      var year = (e.date || "").slice(0, 4);
+      if (year === "2026") e.subcategoryId = si26.id;
+      else if (year === "2027") e.subcategoryId = si27.id;
+    });
+  }
+  s.summerSubcategoriesSeeded = true;
+  return s;
+}
+
 function defaultState(){
   var s = {
     title: "DPI Teacher Training Calendar",
@@ -540,9 +568,11 @@ function defaultState(){
     attendanceBoardIds: ["board-cs-educator", "board-ai-ambass", "board-summer"],
     mailingListBoardIds: ["board-newsletters"],
     proposedBudget: { categories: [] },
-    proposedBudgetSeeded: false
+    proposedBudgetSeeded: false,
+    summerSubcategoriesSeeded: false
   };
   s = seedProposedBudgetIfNeeded(s);
+  s = seedSummerSubcategoriesIfNeeded(s);
   return seedHolidaysIfNeeded(s);
 }
 
@@ -589,6 +619,10 @@ function buildState(loaded){
     s.proposedBudgetSeeded = false;
   }
   seedProposedBudgetIfNeeded(s);
+  if (loaded && loaded.summerSubcategoriesSeeded === undefined){
+    s.summerSubcategoriesSeeded = false;
+  }
+  seedSummerSubcategoriesIfNeeded(s);
   return s;
 }
 
@@ -741,7 +775,8 @@ var ui = {
   dragEventId: null,
   participantSearch: "",
   mailingListBoardId: null,
-  mailingListDomain: "all"
+  mailingListDomain: "all",
+  attendanceGroupCollapsed: {}
 };
 
 /* ============================================================
@@ -1069,9 +1104,31 @@ function emptyState(title, sub){
    ============================================================ */
 function attendanceBoardIds(){ return state.attendanceBoardIds || []; }
 
-function attendanceViewHTML(){
+function attendanceSessionGroups(){
   var ids = attendanceBoardIds();
-  var sessions = sortedEvents().filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
+  var groups = [];
+  ids.forEach(function(boardId){
+    var board = boardById(boardId);
+    if (!board) return;
+    var boardSessions = sortedEvents().filter(function(e){ return e.boardId === boardId; });
+    if (!boardSessions.length) return;
+    var subcats = board.subcategories || [];
+    if (!subcats.length){
+      groups.push({ key: boardId, label: board.name, sessions: boardSessions });
+      return;
+    }
+    subcats.forEach(function(sc){
+      var scSessions = boardSessions.filter(function(e){ return e.subcategoryId === sc.id; });
+      if (scSessions.length) groups.push({ key: boardId + ":" + sc.id, label: sc.name, sessions: scSessions });
+    });
+    var leftover = boardSessions.filter(function(e){ return !e.subcategoryId || !subcats.some(function(sc){ return sc.id === e.subcategoryId; }); });
+    if (leftover.length) groups.push({ key: boardId + ":none", label: board.name, sessions: leftover });
+  });
+  return groups;
+}
+
+function attendanceViewHTML(){
+  var groups = attendanceSessionGroups();
   var html = '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
     '<button class="btn" data-action="add-field">+ Add info field</button>' +
     (ui.attendanceSession === "directory" ? '<button class="btn" data-action="export-participants">Export participants</button>' : '') +
@@ -1083,10 +1140,23 @@ function attendanceViewHTML(){
   html += '<div class="two-col">';
   html += '<div class="side-list">';
   html += '<div class="side-list-item ' + (ui.attendanceSession==="directory"?"active":"") + '" data-action="attendance-select" data-id="directory">All Participants <span class="sub">' + state.participants.length + '</span></div>';
-  sessions.forEach(function(e){
-    html += '<div class="side-list-item ' + (ui.attendanceSession===e.id?"active":"") + '" data-action="attendance-select" data-id="' + e.id + '">' +
-              esc(e.title) + '<span class="sub">' + (e.attendeeIds||[]).length + '</span>' +
-            '</div>';
+  groups.forEach(function(g){
+    if (ui.attendanceGroupCollapsed[g.key] === undefined) ui.attendanceGroupCollapsed[g.key] = true;
+    var collapsed = ui.attendanceGroupCollapsed[g.key];
+    html += '<div class="att-group">';
+    html += '<div class="att-group-header">' +
+      '<button type="button" class="att-group-toggle" data-action="attendance-toggle-group" data-key="' + attr(g.key) + '" title="' + (collapsed?"Expand":"Collapse") + '">' + (collapsed ? "&#9656;" : "&#9662;") + '</button>' +
+      '<span class="att-group-label">' + esc(g.label) + '</span>' +
+      '<span class="att-group-count">' + g.sessions.length + '</span>' +
+    '</div>';
+    if (!collapsed){
+      g.sessions.forEach(function(e){
+        html += '<div class="side-list-item att-session-item ' + (ui.attendanceSession===e.id?"active":"") + '" data-action="attendance-select" data-id="' + e.id + '">' +
+                  esc(e.title) + '<span class="sub">' + (e.attendeeIds||[]).length + '</span>' +
+                '</div>';
+      });
+    }
+    html += '</div>';
   });
   html += '</div>';
   html += '<div class="content-col">';
@@ -1094,7 +1164,7 @@ function attendanceViewHTML(){
     html += directoryTableHTML();
   } else {
     var session = eventById(ui.attendanceSession);
-    if (!session || ids.indexOf(session.boardId) === -1){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
+    if (!session || attendanceBoardIds().indexOf(session.boardId) === -1){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
     else html += sessionRosterHTML(session);
   }
   html += '</div>';
@@ -2049,6 +2119,11 @@ var ACTIONS = {
   "close-modal-overlay": function(t, ev){ if (ev.target === t) closeModal(); },
 
   "attendance-select": function(t){ ui.attendanceSession = t.getAttribute("data-id"); render(); },
+  "attendance-toggle-group": function(t){
+    var key = t.getAttribute("data-key");
+    ui.attendanceGroupCollapsed[key] = !ui.attendanceGroupCollapsed[key];
+    render();
+  },
   "add-new-attendee": function(t){ openModal(attendeeModalHTML(t.getAttribute("data-id"))); },
   "add-participant": function(){ openModal(attendeeModalHTML(null)); },
   "add-existing-attendee": function(t){ openModal(existingAttendeeModalHTML(t.getAttribute("data-id"))); },
@@ -2651,7 +2726,7 @@ function handleBackupFile(file){
     confirmModal("This will replace everything currently in the calendar (boards, events, participants, budgets) with the contents of this backup file. This can't be undone. Continue?", function(){
       state = ensureDefaults(restored);
       state.participants.forEach(migrateParticipant);
-      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all" };
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", attendanceGroupCollapsed: {} };
       saveState(); render();
       alertModal("Backup restored successfully.", "Import complete");
     }, { title: "Restore backup?", confirmLabel: "Restore backup" });
