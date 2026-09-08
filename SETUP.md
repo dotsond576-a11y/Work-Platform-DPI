@@ -2,7 +2,7 @@
 
 This app stores its data in a shared Firebase (Firestore) database instead
 of the browser's local storage, so everyone who signs in sees the same
-boards, events, attendance, and budget data. Access is restricted to four
+boards, events, attendance, and budget data. Access is restricted to
 accounts you create yourself (email + password — no Google account
 required).
 
@@ -17,13 +17,14 @@ jriel2@uic.edu
 markh3@illinois.edu
 tmcfar1@uillinois.edu
 jdanish@illinois.edu
+ddotson2@uillinois.edu
 ```
 
 This list lives in two places and **must match exactly**:
 - `ALLOWED_EMAILS` in `index.html` (controls what the app's UI shows)
 - The Firestore security rules below (the actual server-side enforcement)
 
-## 1. Create the four sign-in accounts
+## 1. Create the sign-in accounts
 
 1. Go to https://console.firebase.google.com, open the `dpi-ttprojects`
    project.
@@ -31,7 +32,7 @@ This list lives in two places and **must match exactly**:
    **Email/Password** is enabled (toggle it on if not, then Save).
 3. Go to the **Users** tab → **Add user**.
 4. Enter one person's email (from the list above) and a password you
-   choose, then **Add user**. Repeat for all four.
+   choose, then **Add user**. Repeat for everyone on the list.
 5. Share each person's password with them directly (not over a public
    channel). They can't self-reset yet — see "Password resets" below.
 
@@ -54,7 +55,8 @@ service cloud.firestore {
           "jriel2@uic.edu",
           "markh3@illinois.edu",
           "tmcfar1@uillinois.edu",
-          "jdanish@illinois.edu"
+          "jdanish@illinois.edu",
+          "ddotson2@uillinois.edu"
         ];
     }
   }
@@ -65,8 +67,8 @@ service cloud.firestore {
 
 `index.html` is already configured — just deploy it (e.g. push to GitHub
 Pages). Visit the live site: you should see an email/password sign-in
-screen. Sign in with one of the four accounts to load (or bootstrap) the
-shared calendar.
+screen. Sign in with one of the allowlisted accounts to load (or
+bootstrap) the shared calendar.
 
 ## Adding or removing someone later
 
