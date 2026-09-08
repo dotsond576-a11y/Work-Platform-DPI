@@ -1,69 +1,48 @@
 # Sharing this calendar with your team via Firebase
 
-This app now stores its data in a shared Firebase (Firestore) database
-instead of the browser's local storage, so everyone who signs in sees the
-same boards, events, attendance, and budget data. Access is restricted to
-a fixed list of Google accounts.
+This app stores its data in a shared Firebase (Firestore) database instead
+of the browser's local storage, so everyone who signs in sees the same
+boards, events, attendance, and budget data. Access is restricted to four
+accounts you create yourself (email + password — no Google account
+required).
 
-You need to do the one-time setup below in the Firebase console, then
-paste a few values into `index.html`.
+The Firebase project (`dpi-ttprojects`) is already set up and its config
+is wired into `index.html`. What's left is creating the sign-in accounts
+and publishing the Firestore rules below.
 
-## 1. Create a Firebase project
+## Team access list
 
-1. Go to https://console.firebase.google.com and click **Add project**.
-2. Name it something like `dpi-work-platform`. Google Analytics is not
-   needed — you can decline it.
-3. Once created, click the **Web** icon (`</>`) to register a web app.
-   Give it any nickname. You do **not** need Firebase Hosting for this step.
-4. Firebase will show a `firebaseConfig` object with six values
-   (`apiKey`, `authDomain`, `projectId`, `storageBucket`,
-   `messagingSenderId`, `appId`). Copy these.
-
-## 2. Enable Google sign-in
-
-1. In the console, go to **Build → Authentication → Get started**.
-2. Under **Sign-in method**, enable **Google**.
-3. Under **Authentication → Settings → Authorized domains**, add the
-   domain your site is hosted on (e.g. `yourname.github.io`). Without
-   this, sign-in popups will fail on your live site.
-
-## 3. Create the Firestore database
-
-1. Go to **Build → Firestore Database → Create database**.
-2. Choose a region close to your team and start in **production mode**
-   (we'll set real rules in step 5, so it's safe to skip test mode).
-
-## 4. Update `index.html`
-
-Near the top of the `<script>` block, find `FIREBASE_CONFIG` and
-`ALLOWED_EMAILS` and fill in your real values:
-
-```js
-var FIREBASE_CONFIG = {
-  apiKey: "...",
-  authDomain: "...",
-  projectId: "...",
-  storageBucket: "...",
-  messagingSenderId: "...",
-  appId: "..."
-};
-
-var ALLOWED_EMAILS = [
-  "person1@example.com",
-  "person2@example.com",
-  "person3@example.com",
-  "person4@example.com"
-];
+```
+jriel2@uic.edu
+markh3@illinois.edu
+tmcfar1@uillinois.edu
+jdanish@illinois.edu
 ```
 
-`ALLOWED_EMAILS` only controls what the app's UI shows (a friendlier
-"you're not authorized" message). The actual access control is enforced
-server-side by the Firestore rules below — **use the same four addresses
-in both places.**
+This list lives in two places and **must match exactly**:
+- `ALLOWED_EMAILS` in `index.html` (controls what the app's UI shows)
+- The Firestore security rules below (the actual server-side enforcement)
 
-## 5. Set Firestore security rules
+## 1. Create the four sign-in accounts
 
-In **Firestore Database → Rules**, replace the contents with:
+1. Go to https://console.firebase.google.com, open the `dpi-ttprojects`
+   project.
+2. Go to **Build → Authentication → Sign-in method**, confirm
+   **Email/Password** is enabled (toggle it on if not, then Save).
+3. Go to the **Users** tab → **Add user**.
+4. Enter one person's email (from the list above) and a password you
+   choose, then **Add user**. Repeat for all four.
+5. Share each person's password with them directly (not over a public
+   channel). They can't self-reset yet — see "Password resets" below.
+
+## 2. Create the Firestore database (if not already done)
+
+1. **Build → Firestore Database → Create database**.
+2. Pick a region, choose **Start in production mode**, then **Create**.
+
+## 3. Set the Firestore security rules
+
+In **Firestore Database → Rules**, paste this and click **Publish**:
 
 ```
 rules_version = '2';
@@ -72,31 +51,47 @@ service cloud.firestore {
     match /dpiCalendar/sharedState {
       allow read, write: if request.auth != null &&
         request.auth.token.email in [
-          "person1@example.com",
-          "person2@example.com",
-          "person3@example.com",
-          "person4@example.com"
+          "jriel2@uic.edu",
+          "markh3@illinois.edu",
+          "tmcfar1@uillinois.edu",
+          "jdanish@illinois.edu"
         ];
     }
   }
 }
 ```
 
-Replace the four emails with your real team list (must match
-`ALLOWED_EMAILS` in `index.html`), then click **Publish**.
+## 4. Push and test
 
-## 6. Commit and push
+`index.html` is already configured — just deploy it (e.g. push to GitHub
+Pages). Visit the live site: you should see an email/password sign-in
+screen. Sign in with one of the four accounts to load (or bootstrap) the
+shared calendar.
 
-Fill in the config, commit, and push to your GitHub Pages branch as
-usual. Visit the live site — you should see a "Sign in with Google"
-screen before the calendar loads.
+## Adding or removing someone later
+
+1. Firebase console → Authentication → Users: add/remove their account.
+2. Update `ALLOWED_EMAILS` in `index.html` and redeploy.
+3. Update the email list in the Firestore rules and republish.
+
+All three steps are needed — missing one either leaves a removed person
+with access (rules) or blocks a new person from seeing the app's UI
+correctly (client list), so keep them in sync.
+
+## Password resets
+
+There's no self-service "forgot password" flow wired up in the app. If
+someone forgets their password, go to Authentication → Users, find their
+account, and use the console's reset options (or delete and recreate the
+account with a new password).
 
 ## Notes
 
-- Adding or removing someone later just means editing the email list in
-  both `index.html` and the Firestore rules, then republishing the rules.
 - The free ("Spark") Firebase plan comfortably covers a small team's
   usage — no billing setup required.
-- If you ever want to inspect or manually fix the raw data, it lives in
-  Firestore under `dpiCalendar/sharedState` — viewable in the Firebase
-  console under **Firestore Database → Data**.
+- The `apiKey` in `index.html` is meant to be public for Firebase web
+  apps — it does not grant access by itself. Actual access control is
+  the Firestore rules above.
+- To inspect or manually fix the raw data, it lives in Firestore under
+  `dpiCalendar/sharedState` — viewable in the Firebase console under
+  **Firestore Database → Data**.
