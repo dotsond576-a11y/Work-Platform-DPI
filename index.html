@@ -449,6 +449,14 @@ var ALLOWED_EMAILS = [
 var FIRESTORE_COLLECTION = "dpiCalendar";
 var FIRESTORE_DOC_ID = "sharedState";
 
+// These fields are "which screen am I looking at" state, not shared
+// calendar data - they stay local to this browser (localStorage) and are
+// never written to or read from the shared Firestore document, so
+// switching tabs/filters/months on one screen doesn't change what other
+// signed-in users are looking at.
+var LOCAL_VIEW_STORAGE_KEY = "dpiCalendarLocalView_v1";
+var LOCAL_STATE_KEYS = ["currentView", "calendarCursor", "boardFilter"];
+
 var firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
 var auth = firebase.auth();
 var db = firebase.firestore();
@@ -607,6 +615,7 @@ function persist(data, attempt){
   // Firestore rejects `undefined` field values (unlike JSON.stringify,
   // which just drops them); round-trip through JSON to strip any out.
   var clean = JSON.parse(JSON.stringify(data));
+  LOCAL_STATE_KEYS.forEach(function(key){ delete clean[key]; });
   stateDocRef.set(clean).catch(function(err){
     if (attempt < 3){
       setTimeout(function(){ persist(data, attempt + 1); }, 500 * Math.pow(2, attempt));
@@ -615,6 +624,24 @@ function persist(data, attempt){
       alertModal("Your last change couldn't be saved to the shared calendar. Check your internet connection, then try the change again.", "Save failed");
     }
   });
+}
+
+function saveLocalViewState(){
+  try{
+    var snapshot = {};
+    LOCAL_STATE_KEYS.forEach(function(key){ snapshot[key] = state[key]; });
+    localStorage.setItem(LOCAL_VIEW_STORAGE_KEY, JSON.stringify(snapshot));
+  }catch(err){ /* localStorage unavailable - view just won't persist across reloads */ }
+}
+function applyLocalViewState(){
+  try{
+    var raw = localStorage.getItem(LOCAL_VIEW_STORAGE_KEY);
+    if (!raw) return;
+    var saved = JSON.parse(raw);
+    LOCAL_STATE_KEYS.forEach(function(key){
+      if (saved[key] !== undefined) state[key] = saved[key];
+    });
+  }catch(err){ /* ignore corrupt/unavailable local view state */ }
 }
 
 /* ============================================================
@@ -1838,7 +1865,7 @@ function addFieldModalHTML(){
    Actions
    ============================================================ */
 var ACTIONS = {
-  "switch-view": function(t){ state.currentView = t.getAttribute("data-view"); saveState(); render(); },
+  "switch-view": function(t){ state.currentView = t.getAttribute("data-view"); saveLocalViewState(); render(); },
 
   "edit-title": function(t){
     var span = t;
@@ -1874,7 +1901,7 @@ var ACTIONS = {
   "board-filter": function(t){
     var b = t.getAttribute("data-board");
     state.boardFilter = b || null;
-    saveState(); render();
+    saveLocalViewState(); render();
   },
   "add-board": function(){ openModal(boardModalHTML(null)); },
   "remove-budget-board": function(t){
@@ -1990,9 +2017,9 @@ var ACTIONS = {
     var parts = (state.calendarCursor || todayISO().slice(0,7)).split("-").map(Number);
     var d = new Date(parts[0], parts[1]-1 + dir, 1);
     state.calendarCursor = d.getFullYear() + "-" + pad(d.getMonth()+1);
-    saveState(); render();
+    saveLocalViewState(); render();
   },
-  "nav-today": function(){ state.calendarCursor = todayISO().slice(0,7); saveState(); render(); },
+  "nav-today": function(){ state.calendarCursor = todayISO().slice(0,7); saveLocalViewState(); render(); },
 
   "add-event": function(t){
     var date = t.getAttribute("data-date") || todayISO();
@@ -2683,6 +2710,7 @@ function startCloudSync(){
       state = buildState(null);
       persist(state, 0);
     }
+    applyLocalViewState();
     hideAuthGate();
     render();
     listenForRemoteUpdates();
@@ -2696,7 +2724,13 @@ function listenForRemoteUpdates(){
   remoteUnsubscribe = stateDocRef.onSnapshot({ includeMetadataChanges: true }, function(snap){
     if (snap.metadata.hasPendingWrites || !snap.exists) return;
     applyingRemoteUpdate = true;
+    // Keep this browser's own view (current tab, calendar month, board
+    // filter) untouched - only the shared calendar data below should
+    // update when someone else makes a change.
+    var localView = {};
+    LOCAL_STATE_KEYS.forEach(function(key){ localView[key] = state[key]; });
     state = buildState(snap.data());
+    LOCAL_STATE_KEYS.forEach(function(key){ state[key] = localView[key]; });
     render();
     applyingRemoteUpdate = false;
   }, function(err){
