@@ -378,6 +378,8 @@ td.budget-indent{padding-left:24px;}
 .auth-card .brand-mark{width:46px;height:46px;font-size:18px;margin:0 auto 18px;}
 .auth-message{color:var(--text-muted);font-size:13.5px;line-height:1.5;margin:0 0 22px;}
 .auth-card .btn{width:100%;margin-bottom:8px;}
+.auth-card .field{text-align:left;}
+.auth-card input{text-align:left;}
 .auth-user-badge{font-size:12.5px;color:rgba(255,255,255,0.75);}
 </style>
 </head>
@@ -385,8 +387,12 @@ td.budget-indent{padding-left:24px;}
 <div id="auth-gate" class="auth-gate">
   <div class="auth-card">
     <div class="brand-mark">DPI</div>
-    <p id="auth-message" class="auth-message">Sign in with your Google account to access the shared calendar.</p>
-    <button id="auth-signin-btn" class="btn btn-primary" type="button">Sign in with Google</button>
+    <p id="auth-message" class="auth-message">Sign in to access the shared calendar.</p>
+    <form id="auth-signin-form">
+      <div class="field"><input type="email" id="auth-email" placeholder="Email" autocomplete="username" required></div>
+      <div class="field"><input type="password" id="auth-password" placeholder="Password" autocomplete="current-password" required></div>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+    </form>
     <button id="auth-signout-btn" class="btn" type="button" style="display:none;">Sign out</button>
   </div>
 </div>
@@ -420,22 +426,23 @@ td.budget-indent{padding-left:24px;}
    Firestore security rules.
    ============================================================ */
 var FIREBASE_CONFIG = {
-  apiKey: "REPLACE_WITH_YOUR_API_KEY",
-  authDomain: "REPLACE_WITH_YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
-  storageBucket: "REPLACE_WITH_YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
-  appId: "REPLACE_WITH_YOUR_APP_ID"
+  apiKey: "AIzaSyCzHFnWghVnBgU4G3gtEzlwlMlMvlJtFi0",
+  authDomain: "dpi-ttprojects.firebaseapp.com",
+  projectId: "dpi-ttprojects",
+  storageBucket: "dpi-ttprojects.firebasestorage.app",
+  messagingSenderId: "483174202798",
+  appId: "1:483174202798:web:5acec1f23c8f90a8ed5c3f"
 };
 
-// The Google account emails allowed to sign in. This list only controls
-// what the UI shows - actual enforcement lives in the Firestore security
+// The emails allowed to sign in (Firebase Email/Password accounts created
+// in the Firebase console - see SETUP.md). This list only controls what
+// the UI shows - actual enforcement lives in the Firestore security
 // rules (see SETUP.md), which must list the same addresses.
 var ALLOWED_EMAILS = [
-  "person1@example.com",
-  "person2@example.com",
-  "person3@example.com",
-  "person4@example.com"
+  "jriel2@uic.edu",
+  "markh3@illinois.edu",
+  "tmcfar1@uillinois.edu",
+  "jdanish@illinois.edu"
 ];
 
 var FIRESTORE_COLLECTION = "dpiCalendar";
@@ -2657,7 +2664,7 @@ function showAuthGate(message, showSignOut){
   document.getElementById("app").style.display = "none";
   document.getElementById("auth-gate").style.display = "flex";
   document.getElementById("auth-message").textContent = message;
-  document.getElementById("auth-signin-btn").style.display = showSignOut ? "none" : "";
+  document.getElementById("auth-signin-form").style.display = showSignOut ? "none" : "";
   document.getElementById("auth-signout-btn").style.display = showSignOut ? "" : "none";
 }
 
@@ -2696,11 +2703,14 @@ function listenForRemoteUpdates(){
   });
 }
 
-document.getElementById("auth-signin-btn").addEventListener("click", function(){
-  var provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(function(err){
+document.getElementById("auth-signin-form").addEventListener("submit", function(e){
+  e.preventDefault();
+  var email = document.getElementById("auth-email").value.trim();
+  var password = document.getElementById("auth-password").value;
+  auth.signInWithEmailAndPassword(email, password).catch(function(err){
     console.error("Sign-in failed", err);
-    showAuthGate("Sign-in failed (" + err.message + "). Please try again.", false);
+    document.getElementById("auth-password").value = "";
+    showAuthGate("Sign-in failed (" + err.message + "). Check your email and password and try again.", false);
   });
 });
 document.getElementById("auth-signout-btn").addEventListener("click", function(){
@@ -2712,7 +2722,7 @@ auth.onAuthStateChanged(function(user){
   if (remoteUnsubscribe){ remoteUnsubscribe(); remoteUnsubscribe = null; }
   if (!user){
     currentUserEmail = "";
-    showAuthGate("Sign in with your Google account to access the shared calendar.", false);
+    showAuthGate("Sign in to access the shared calendar.", false);
     return;
   }
   var email = (user.email || "").toLowerCase();
