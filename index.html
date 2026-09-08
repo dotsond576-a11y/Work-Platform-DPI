@@ -158,16 +158,6 @@ main#main-content{flex:1;overflow-y:auto;padding:22px 26px;min-width:0;display:f
 }
 .btn-add-board:hover{border-color:var(--orange-500);color:var(--orange-600);background:var(--orange-100);}
 
-.app-footer{
-  flex-shrink:0;display:flex;justify-content:flex-end;align-items:center;
-  padding:6px 18px;border-top:1px solid var(--border);background:var(--card);
-}
-.btn-reset-mini{
-  padding:5px 10px;border-radius:var(--radius-sm);border:1px solid transparent;
-  background:transparent;color:var(--text-faint);font-weight:600;font-size:11.5px;cursor:pointer;
-}
-.btn-reset-mini:hover{border-color:#DC2626;color:#DC2626;}
-
 /* Upcoming panel */
 .upcoming-item{
   display:flex;gap:10px;align-items:flex-start;padding:10px 6px;border-bottom:1px solid var(--border);cursor:pointer;
@@ -374,9 +364,6 @@ td.budget-indent{padding-left:24px;}
     <main id="main-content"></main>
     <aside class="upcoming-panel" id="upcoming-panel"></aside>
   </div>
-  <footer class="app-footer">
-    <button class="btn-reset-mini" data-action="reset-data">Reset all data&hellip;</button>
-  </footer>
 </div>
 <div id="modal-root"></div>
 <input type="file" id="file-import-input" accept=".csv,.xlsx,.xls" style="display:none;">
@@ -1786,15 +1773,6 @@ var ACTIONS = {
     input.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); input.blur(); } if (e.key === "Escape"){ render(); } });
   },
 
-  "reset-data": function(){
-    confirmModal("This will permanently erase all boards, events, participants, and budgets, and restore the default setup. Continue?", function(){
-      confirmModal("Last chance: everything currently saved will be gone for good, with no way to undo it. Erase it all?", function(){
-        state = defaultState();
-        ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all" };
-        saveState(); render();
-      }, { title: "Are you absolutely sure?", confirmLabel: "Yes, erase everything" });
-    }, { title: "Reset all data?", confirmLabel: "Reset everything" });
-  },
   "export-backup": function(){ downloadBackupJSON(); },
   "import-backup": function(){
     var input = document.getElementById("backup-import-input");
