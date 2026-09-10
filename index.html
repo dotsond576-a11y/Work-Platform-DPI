@@ -459,12 +459,15 @@ var stateDocRef = db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
 var remoteUnsubscribe = null;
 var applyingRemoteUpdate = false;
 var currentUserEmail = "";
-// Tracks the JSON we most recently wrote to Firestore. When our own write
-// round-trips back through onSnapshot, this lets us recognize "that's just
-// my own edit echoing back" and skip the full re-render that would
-// otherwise blow away focus/cursor position in whatever field someone is
-// still typing into.
-var lastSentStateJSON = null;
+// A random id for this browser tab, stamped on every write we make. When a
+// write echoes back through onSnapshot, comparing writerId (not content)
+// tells us "that's mine" reliably even if a second edit already went out
+// before the first one's round trip finished - a plain content comparison
+// breaks in that case, since by the time the older echo arrives our local
+// state (and what we most recently sent) has already moved past it, so the
+// echo looks like a foreign change and the app rebuilds from that stale
+// snapshot mid-edit, visibly reverting what was just typed.
+var CLIENT_INSTANCE_ID = uid();
 
 /* ============================================================
    Constants & defaults
@@ -644,11 +647,11 @@ function persist(data, attempt){
   // which just drops them); round-trip through JSON to strip any out.
   var clean = JSON.parse(JSON.stringify(data));
   LOCAL_STATE_KEYS.forEach(function(key){ delete clean[key]; });
-  // Record this before the write goes out (not after it resolves): Firestore
-  // can deliver the onSnapshot echo for this same write synchronously inside
-  // set(), before its returned promise settles, so setting this in a .then()
-  // would race the listener below and miss the match.
-  lastSentStateJSON = JSON.stringify(clean);
+  // Stamp every write with this tab's id so the onSnapshot listener can tell
+  // "I wrote this" from "someone else did" by identity, not by comparing
+  // content - content comparison breaks once a second edit goes out before
+  // the first one's round trip finishes.
+  clean._writerId = CLIENT_INSTANCE_ID;
   stateDocRef.set(clean).catch(function(err){
     if (attempt < 3){
       setTimeout(function(){ persist(data, attempt + 1); }, 500 * Math.pow(2, attempt));
@@ -2804,8 +2807,8 @@ function startCloudSync(){
 function listenForRemoteUpdates(){
   remoteUnsubscribe = stateDocRef.onSnapshot({ includeMetadataChanges: true }, function(snap){
     if (snap.metadata.hasPendingWrites || !snap.exists) return;
-    var incomingJSON = JSON.stringify(snap.data());
-    if (incomingJSON === lastSentStateJSON) return; // our own edit echoing back - nothing changed, don't re-render and steal focus
+    var incoming = snap.data();
+    if (incoming && incoming._writerId === CLIENT_INSTANCE_ID) return; // one of this tab's own writes echoing back - never something new to render
     applyingRemoteUpdate = true;
     // Keep this browser's own view (current tab, calendar month, board
     // filter) untouched - only the shared calendar data below should
