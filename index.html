@@ -450,7 +450,7 @@ var FIRESTORE_DOC_ID = "sharedState";
 // switching tabs/filters/months on one screen doesn't change what other
 // signed-in users are looking at.
 var LOCAL_VIEW_STORAGE_KEY = "dpiCalendarLocalView_v1";
-var LOCAL_STATE_KEYS = ["currentView", "calendarCursor", "boardFilter"];
+var LOCAL_STATE_KEYS = ["currentView", "calendarCursor", "boardFilter", "attendanceSortBy"];
 
 var firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
 var auth = firebase.auth();
@@ -459,6 +459,12 @@ var stateDocRef = db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
 var remoteUnsubscribe = null;
 var applyingRemoteUpdate = false;
 var currentUserEmail = "";
+// Tracks the JSON we most recently wrote to Firestore. When our own write
+// round-trips back through onSnapshot, this lets us recognize "that's just
+// my own edit echoing back" and skip the full re-render that would
+// otherwise blow away focus/cursor position in whatever field someone is
+// still typing into.
+var lastSentStateJSON = null;
 
 /* ============================================================
    Constants & defaults
@@ -562,6 +568,7 @@ function defaultState(){
     boardFilter: null,
     currentView: "calendar",
     calendarCursor: "2026-06",
+    attendanceSortBy: "lastName",
     resourceLinks: [],
     holidaysSeeded: false,
     budgetBoardIds: ["board-cs-educator", "board-summer", "board-ai-ambass"],
@@ -637,6 +644,11 @@ function persist(data, attempt){
   // which just drops them); round-trip through JSON to strip any out.
   var clean = JSON.parse(JSON.stringify(data));
   LOCAL_STATE_KEYS.forEach(function(key){ delete clean[key]; });
+  // Record this before the write goes out (not after it resolves): Firestore
+  // can deliver the onSnapshot echo for this same write synchronously inside
+  // set(), before its returned promise settles, so setting this in a .then()
+  // would race the listener below and miss the match.
+  lastSentStateJSON = JSON.stringify(clean);
   stateDocRef.set(clean).catch(function(err){
     if (attempt < 3){
       setTimeout(function(){ persist(data, attempt + 1); }, 500 * Math.pow(2, attempt));
@@ -728,11 +740,16 @@ function eventById(id){ return state.events.find(function(e){ return e.id === id
 function participantById(id){ return state.participants.find(function(p){ return p.id === id; }); }
 function fullName(p){ return ((p.firstName||"") + " " + (p.lastName||"")).trim() || "(Unnamed)"; }
 function sortedParticipants(list){
-  return list.slice().sort(function(a, b){
-    var an = ((a.lastName||"") + " " + (a.firstName||"")).trim().toLowerCase();
-    var bn = ((b.lastName||"") + " " + (b.firstName||"")).trim().toLowerCase();
-    return an.localeCompare(bn);
-  });
+  var sortBy = state.attendanceSortBy || "lastName";
+  var keyFor;
+  if (sortBy === "firstName"){
+    keyFor = function(p){ return ((p.firstName||"") + " " + (p.lastName||"")).trim().toLowerCase(); };
+  } else if (sortBy === "school"){
+    keyFor = function(p){ return ((p.school||"") + " " + (p.lastName||"") + " " + (p.firstName||"")).trim().toLowerCase(); };
+  } else {
+    keyFor = function(p){ return ((p.lastName||"") + " " + (p.firstName||"")).trim().toLowerCase(); };
+  }
+  return list.slice().sort(function(a, b){ return keyFor(a).localeCompare(keyFor(b)); });
 }
 function sortedEvents(){ return state.events.slice().sort(function(a,b){ return (a.date || "").localeCompare(b.date || ""); }); }
 function boardIdsForFilter(filterId){
@@ -1129,7 +1146,15 @@ function attendanceSessionGroups(){
 
 function attendanceViewHTML(){
   var groups = attendanceSessionGroups();
+  var sortBy = state.attendanceSortBy || "lastName";
   var html = '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
+    '<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);">Sort by' +
+      '<select id="attendance-sort-select" style="border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12.5px;">' +
+        '<option value="lastName" ' + (sortBy==="lastName"?"selected":"") + '>Last name</option>' +
+        '<option value="firstName" ' + (sortBy==="firstName"?"selected":"") + '>First name</option>' +
+        '<option value="school" ' + (sortBy==="school"?"selected":"") + '>School</option>' +
+      '</select>' +
+    '</label>' +
     '<button class="btn" data-action="add-field">+ Add info field</button>' +
     (ui.attendanceSession === "directory" ? '<button class="btn" data-action="export-participants">Export participants</button>' : '') +
     '<button class="btn" data-action="export-all-attendance">Download all attendance</button>' +
@@ -2440,6 +2465,9 @@ document.addEventListener("change", function(e){
       ui.mailingListBoardId = t.value;
       saveState(); render();
     }
+  } else if (t.matches("#attendance-sort-select")){
+    state.attendanceSortBy = t.value;
+    saveLocalViewState(); render();
   }
   if (t.id === "board-is-folder"){
     var parentField = document.getElementById("board-parent-field");
@@ -2776,6 +2804,8 @@ function startCloudSync(){
 function listenForRemoteUpdates(){
   remoteUnsubscribe = stateDocRef.onSnapshot({ includeMetadataChanges: true }, function(snap){
     if (snap.metadata.hasPendingWrites || !snap.exists) return;
+    var incomingJSON = JSON.stringify(snap.data());
+    if (incomingJSON === lastSentStateJSON) return; // our own edit echoing back - nothing changed, don't re-render and steal focus
     applyingRemoteUpdate = true;
     // Keep this browser's own view (current tab, calendar month, board
     // filter) untouched - only the shared calendar data below should
