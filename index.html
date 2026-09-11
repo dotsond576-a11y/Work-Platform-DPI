@@ -796,7 +796,8 @@ var ui = {
   participantSearch: "",
   mailingListBoardId: null,
   mailingListDomain: "all",
-  attendanceGroupCollapsed: {}
+  attendanceGroupCollapsed: {},
+  budgetChartsBoardFilter: "all"
 };
 
 /* ============================================================
@@ -1570,11 +1571,33 @@ function budgetRowHTML(eventId, item){
 }
 
 function budgetChartsHTML(){
-  var events = budgetEvents();
+  var ids = state.budgetBoardIds || [];
+  var filterId = ui.budgetChartsBoardFilter || "all";
+  if (filterId !== "all" && ids.indexOf(filterId) === -1) filterId = "all";
+  var allEvents = budgetEvents();
+  var events = filterId === "all" ? allEvents : allEvents.filter(function(e){ return e.boardId === filterId; });
+  var filterBoard = filterId === "all" ? null : boardById(filterId);
+
+  var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Showing charts for:</span>' +
+    '<select id="budget-charts-filter-select" style="font-size:12.5px;border:1px solid var(--border);border-radius:8px;padding:5px 8px;">' +
+      '<option value="all" ' + (filterId==="all"?"selected":"") + '>All budget areas</option>' +
+      ids.map(function(id){
+        var b = boardById(id);
+        if (!b) return "";
+        return '<option value="' + id + '" ' + (filterId===id?"selected":"") + '>' + esc(b.name) + '</option>';
+      }).join("") +
+    '</select>' +
+  '</div>';
+
   var hasData = events.some(function(e){ return (e.budgetItems||[]).length; });
-  if (!hasData) return emptyState("No budget data yet.", "Add line items to an event's budget to see charts here.");
-  var html = '<div class="chart-card"><h4>Total Cost by Event</h4>' + barChartSVG(events) + '</div>';
-  html += '<div class="chart-card"><h4>Total Cost by Funds</h4>' + donutChartSVG(events) + '</div>';
+  if (!hasData){
+    var noun = filterBoard ? esc(filterBoard.name) : "this selection";
+    return html + emptyState("No budget data yet for " + noun + ".", "Add line items to an event's budget to see charts here.");
+  }
+  var titleSuffix = filterBoard ? " — " + esc(filterBoard.name) : "";
+  html += '<div class="chart-card"><h4>Total Cost by Event' + titleSuffix + '</h4>' + barChartSVG(events) + '</div>';
+  html += '<div class="chart-card"><h4>Total Cost by Funds' + titleSuffix + '</h4>' + donutChartSVG(events) + '</div>';
   return html;
 }
 
@@ -2471,6 +2494,9 @@ document.addEventListener("change", function(e){
   } else if (t.matches("#attendance-sort-select")){
     state.attendanceSortBy = t.value;
     saveLocalViewState(); render();
+  } else if (t.matches("#budget-charts-filter-select")){
+    ui.budgetChartsBoardFilter = t.value;
+    render();
   }
   if (t.id === "board-is-folder"){
     var parentField = document.getElementById("board-parent-field");
@@ -2757,7 +2783,7 @@ function handleBackupFile(file){
     confirmModal("This will replace everything currently in the calendar (boards, events, participants, budgets) with the contents of this backup file. This can't be undone. Continue?", function(){
       state = ensureDefaults(restored);
       state.participants.forEach(migrateParticipant);
-      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", attendanceGroupCollapsed: {} };
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", attendanceGroupCollapsed: {}, budgetChartsBoardFilter: "all" };
       saveState(); render();
       alertModal("Backup restored successfully.", "Import complete");
     }, { title: "Restore backup?", confirmLabel: "Restore backup" });
