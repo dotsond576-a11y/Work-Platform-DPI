@@ -1494,36 +1494,54 @@ function budgetViewHTML(){
   return html;
 }
 
-function budgetOverviewHTML(){
-  var events = budgetEvents();
-  if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
+function budgetEventGroups(){
   var ids = state.budgetBoardIds || [];
-  var grandTotal = 0;
-  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Sub-category</th><th>Date</th><th>Total Cost</th><th></th></tr></thead><tbody>';
+  var events = budgetEvents();
+  var groups = [];
   ids.forEach(function(boardId){
     var board = boardById(boardId);
     if (!board) return;
-    var groupEvents = events.filter(function(e){ return e.boardId === boardId; });
-    if (!groupEvents.length) return;
+    var boardEvents = events.filter(function(e){ return e.boardId === boardId; });
+    if (!boardEvents.length) return;
+    var subcats = board.subcategories || [];
+    if (!subcats.length){
+      groups.push({ key: boardId, label: board.name, color: board.color, events: boardEvents });
+      return;
+    }
+    subcats.forEach(function(sc){
+      var scEvents = boardEvents.filter(function(e){ return e.subcategoryId === sc.id; });
+      if (scEvents.length) groups.push({ key: boardId + ":" + sc.id, label: sc.name, color: board.color, events: scEvents });
+    });
+    var leftover = boardEvents.filter(function(e){ return !e.subcategoryId || !subcats.some(function(sc){ return sc.id === e.subcategoryId; }); });
+    if (leftover.length) groups.push({ key: boardId + ":none", label: board.name, color: board.color, events: leftover });
+  });
+  return groups;
+}
+
+function budgetOverviewHTML(){
+  var events = budgetEvents();
+  if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
+  var groups = budgetEventGroups();
+  var grandTotal = 0;
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Date</th><th>Total Cost</th><th></th></tr></thead><tbody>';
+  groups.forEach(function(g){
     var groupTotal = 0;
-    html += '<tr class="budget-group-header"><td colspan="5"><span class="color-dot" style="background:' + board.color + '"></span>' + esc(board.name) + '</td></tr>';
-    groupEvents.forEach(function(e){
+    html += '<tr class="budget-group-header"><td colspan="4"><span class="color-dot" style="background:' + g.color + '"></span>' + esc(g.label) + '</td></tr>';
+    g.events.forEach(function(e){
       var t = budgetTotals(e);
-      var sub = subcategoryById(e.boardId, e.subcategoryId);
       groupTotal += t.total;
       html += '<tr>' +
         '<td class="budget-indent"><a href="#" data-action="budget-detail" data-id="' + e.id + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(e.title) + '</a></td>' +
-        '<td>' + (sub ? esc(sub.name) : "&mdash;") + '</td>' +
         '<td style="font-family:var(--font-mono);">' + eventDateRangeLabel(e) + '</td>' +
         '<td style="font-family:var(--font-mono);font-weight:700;">' + fmtMoney(t.total) + '</td>' +
         '<td><button class="row-action" data-action="delete-event" data-id="' + e.id + '" title="Delete event">&times;</button></td>' +
         '</tr>';
     });
     grandTotal += groupTotal;
-    html += '<tr class="budget-group-subtotal"><td colspan="3">Subtotal &mdash; ' + esc(board.name) + '</td>' +
+    html += '<tr class="budget-group-subtotal"><td colspan="2">Subtotal &mdash; ' + esc(g.label) + '</td>' +
       '<td>' + fmtMoney(groupTotal) + '</td><td></td></tr>';
   });
-  html += '</tbody><tfoot><tr><td colspan="3">Grand total</td>' +
+  html += '</tbody><tfoot><tr><td colspan="2">Grand total</td>' +
     '<td>' + fmtMoney(grandTotal) + '</td><td></td></tr></tfoot>';
   html += '</table></div>';
   return html;
@@ -1571,31 +1589,28 @@ function budgetRowHTML(eventId, item){
 }
 
 function budgetChartsHTML(){
-  var ids = state.budgetBoardIds || [];
-  var filterId = ui.budgetChartsBoardFilter || "all";
-  if (filterId !== "all" && ids.indexOf(filterId) === -1) filterId = "all";
-  var allEvents = budgetEvents();
-  var events = filterId === "all" ? allEvents : allEvents.filter(function(e){ return e.boardId === filterId; });
-  var filterBoard = filterId === "all" ? null : boardById(filterId);
+  var groups = budgetEventGroups();
+  var filterKey = ui.budgetChartsBoardFilter || "all";
+  var selectedGroup = filterKey === "all" ? null : groups.find(function(g){ return g.key === filterKey; });
+  if (filterKey !== "all" && !selectedGroup) filterKey = "all";
+  var events = selectedGroup ? selectedGroup.events : budgetEvents();
 
   var html = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">' +
     '<span style="font-size:12px;color:var(--text-faint);">Showing charts for:</span>' +
     '<select id="budget-charts-filter-select" style="font-size:12.5px;border:1px solid var(--border);border-radius:8px;padding:5px 8px;">' +
-      '<option value="all" ' + (filterId==="all"?"selected":"") + '>All budget areas</option>' +
-      ids.map(function(id){
-        var b = boardById(id);
-        if (!b) return "";
-        return '<option value="' + id + '" ' + (filterId===id?"selected":"") + '>' + esc(b.name) + '</option>';
+      '<option value="all" ' + (filterKey==="all"?"selected":"") + '>All budget areas</option>' +
+      groups.map(function(g){
+        return '<option value="' + attr(g.key) + '" ' + (filterKey===g.key?"selected":"") + '>' + esc(g.label) + '</option>';
       }).join("") +
     '</select>' +
   '</div>';
 
   var hasData = events.some(function(e){ return (e.budgetItems||[]).length; });
   if (!hasData){
-    var noun = filterBoard ? esc(filterBoard.name) : "this selection";
+    var noun = selectedGroup ? esc(selectedGroup.label) : "this selection";
     return html + emptyState("No budget data yet for " + noun + ".", "Add line items to an event's budget to see charts here.");
   }
-  var titleSuffix = filterBoard ? " — " + esc(filterBoard.name) : "";
+  var titleSuffix = selectedGroup ? " — " + esc(selectedGroup.label) : "";
   html += '<div class="chart-card"><h4>Total Cost by Event' + titleSuffix + '</h4>' + barChartSVG(events) + '</div>';
   html += '<div class="chart-card"><h4>Total Cost by Funds' + titleSuffix + '</h4>' + donutChartSVG(events) + '</div>';
   return html;
