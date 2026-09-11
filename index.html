@@ -651,7 +651,8 @@ var ui = {
   dragEventId: null,
   participantSearch: "",
   mailingListBoardId: null,
-  mailingListDomain: "all"
+  mailingListDomain: "all",
+  budgetChartBoardId: "all"
 };
 
 /* ============================================================
@@ -1379,12 +1380,35 @@ function budgetRowHTML(eventId, item){
     '</tr>';
 }
 
+function budgetChartFilterHTML(){
+  var ids = state.budgetBoardIds || [];
+  if (!ids.length) return "";
+  var current = ui.budgetChartBoardId || "all";
+  var chip = function(id, label){
+    var active = current === id;
+    return '<button type="button" data-action="budget-chart-filter" data-id="' + id + '" ' +
+      'style="border:1px solid ' + (active ? "var(--blue-800)" : "var(--border)") + ';background:' + (active ? "var(--blue-800)" : "#fff") + ';color:' + (active ? "#fff" : "var(--text-muted)") + ';border-radius:999px;padding:4px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">' +
+      esc(label) + '</button>';
+  };
+  var chips = chip("all", "All areas") + ids.map(function(id){
+    var b = boardById(id);
+    return b ? chip(id, b.name) : "";
+  }).join("");
+  return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;">' +
+    '<span style="font-size:12px;color:var(--text-faint);">Show charts for:</span>' + chips +
+  '</div>';
+}
+
 function budgetChartsHTML(){
+  var boardId = ui.budgetChartBoardId || "all";
   var events = budgetEvents();
+  if (boardId !== "all") events = events.filter(function(e){ return e.boardId === boardId; });
   var hasData = events.some(function(e){ return (e.budgetItems||[]).length; });
-  if (!hasData) return emptyState("No budget data yet.", "Add line items to an event's budget to see charts here.");
-  var html = '<div class="chart-card"><h4>Total Cost by Event</h4>' + barChartSVG(events) + '</div>';
-  html += '<div class="chart-card"><h4>Total Cost by Funds</h4>' + donutChartSVG(events) + '</div>';
+  var html = budgetChartFilterHTML();
+  if (!hasData) return html + emptyState("No budget data yet.", "Add line items to an event's budget to see charts here.");
+  var titleSuffix = boardId !== "all" && boardById(boardId) ? " &mdash; " + esc(boardById(boardId).name) : "";
+  html += '<div class="chart-card"><h4>Total Cost by Event' + titleSuffix + '</h4>' + barChartSVG(events) + '</div>';
+  html += '<div class="chart-card"><h4>Total Cost by Funds' + titleSuffix + '</h4>' + donutChartSVG(events) + '</div>';
   return html;
 }
 
@@ -1789,6 +1813,7 @@ var ACTIONS = {
   "remove-budget-board": function(t){
     var id = t.getAttribute("data-id");
     state.budgetBoardIds = (state.budgetBoardIds || []).filter(function(bid){ return bid !== id; });
+    if (ui.budgetChartBoardId === id) ui.budgetChartBoardId = "all";
     saveState(); render();
   },
   "edit-board": function(t){ openModal(boardModalHTML(t.getAttribute("data-id"))); },
@@ -2085,6 +2110,7 @@ var ACTIONS = {
   "export-mailinglist": function(){ exportMailingListCSV(); },
 
   "budget-tab": function(t){ ui.budgetTab = t.getAttribute("data-tab"); render(); },
+  "budget-chart-filter": function(t){ ui.budgetChartBoardId = t.getAttribute("data-id"); render(); },
   "budget-detail": function(t){ ui.budgetTab = "detail"; ui.budgetDetailId = t.getAttribute("data-id"); render(); },
   "add-budget-row": function(t){
     var ev = eventById(t.getAttribute("data-event"));
@@ -2555,7 +2581,7 @@ function handleBackupFile(file){
     confirmModal("This will replace everything currently in the calendar (boards, events, participants, budgets) with the contents of this backup file. This can't be undone. Continue?", function(){
       state = ensureDefaults(restored);
       state.participants.forEach(migrateParticipant);
-      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all" };
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", budgetChartBoardId: "all" };
       saveState(); render();
       alertModal("Backup restored successfully.", "Import complete");
     }, { title: "Restore backup?", confirmLabel: "Restore backup" });
