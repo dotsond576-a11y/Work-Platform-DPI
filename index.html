@@ -279,6 +279,10 @@ label{font-size:12.5px;font-weight:600;color:var(--text-muted);display:block;mar
 .kanban-add{width:100%;background:transparent;border:1.5px dashed #C7CEDB;border-radius:8px;padding:8px;font-size:12.5px;color:var(--text-muted);font-weight:600;}
 .kanban-add:hover{border-color:var(--orange-500);color:var(--orange-600);}
 
+table.data-table tr[draggable="true"] .drag-handle{cursor:grab;color:var(--text-faint);text-align:center;letter-spacing:-2px;width:18px;}
+table.data-table tr[draggable="true"]:active .drag-handle{cursor:grabbing;}
+table.data-table tr.dragging{opacity:.4;}
+
 /* ========================= Data tables (attendance/budget) ========================= */
 .data-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:#fff;}
 table.data-table{width:100%;border-collapse:collapse;font-size:13px;min-width:600px;}
@@ -797,7 +801,9 @@ var ui = {
   mailingListBoardId: null,
   mailingListDomain: "all",
   attendanceGroupCollapsed: {},
-  budgetChartsBoardFilter: "all"
+  budgetChartsBoardFilter: "all",
+  budgetSortField: null,
+  budgetSortDir: "asc"
 };
 
 /* ============================================================
@@ -932,6 +938,7 @@ function renderMain(){
   else if (state.currentView === "resources") el.innerHTML = resourcesViewHTML();
   if (state.currentView === "board") wireBoardDnD();
   if (state.currentView === "attendance") wireDirectorySearch();
+  if (state.currentView === "budget" && ui.budgetTab === "detail") wireBudgetRowDnD();
 }
 
 /* ============================================================
@@ -1110,6 +1117,40 @@ function wireBoardDnD(){
         render();
       }
     });
+  });
+}
+
+function wireBudgetRowDnD(){
+  var tbody = document.getElementById("budget-rows-body");
+  if (!tbody) return;
+  var rows = tbody.querySelectorAll("tr[data-item-row]");
+  rows.forEach(function(row){
+    row.addEventListener("dragstart", function(e){
+      row.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    row.addEventListener("dragend", function(){ row.classList.remove("dragging"); });
+    row.addEventListener("dragover", function(e){
+      e.preventDefault();
+      var dragging = tbody.querySelector("tr.dragging");
+      if (!dragging || dragging === row) return;
+      var rect = row.getBoundingClientRect();
+      var before = (e.clientY - rect.top) < rect.height / 2;
+      tbody.insertBefore(dragging, before ? row : row.nextSibling);
+    });
+  });
+  tbody.addEventListener("drop", function(e){
+    e.preventDefault();
+    var ev = eventById(tbody.getAttribute("data-event"));
+    if (!ev) return;
+    var newOrderIds = Array.prototype.map.call(tbody.querySelectorAll("tr[data-item-row]"), function(r){
+      return r.getAttribute("data-item-row");
+    });
+    var itemsById = {};
+    (ev.budgetItems || []).forEach(function(item){ itemsById[item.id] = item; });
+    ev.budgetItems = newOrderIds.map(function(id){ return itemsById[id]; }).filter(Boolean);
+    ui.budgetSortField = null;
+    saveState(); render();
   });
 }
 
@@ -1560,20 +1601,36 @@ function budgetDetailHTML(ev){
     '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
   '</div>';
   html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
-      '<th>General</th><th>Company</th><th>Funds</th><th>CFOAP</th><th>Order Date</th>' +
-      '<th>Qty</th><th>Unit Cost</th><th>Total</th><th>Shipping</th><th>Total Cost</th><th></th>' +
-    '</tr></thead><tbody id="budget-rows-body">';
+      '<th></th>' +
+      budgetSortHeaderHTML(ev.id, "general", "General") +
+      budgetSortHeaderHTML(ev.id, "company", "Company") +
+      budgetSortHeaderHTML(ev.id, "funds", "Funds") +
+      budgetSortHeaderHTML(ev.id, "cfoap", "CFOAP") +
+      budgetSortHeaderHTML(ev.id, "orderDate", "Order Date") +
+      budgetSortHeaderHTML(ev.id, "qty", "Qty") +
+      budgetSortHeaderHTML(ev.id, "unitCost", "Unit Cost") +
+      budgetSortHeaderHTML(ev.id, "total", "Total") +
+      budgetSortHeaderHTML(ev.id, "shipping", "Shipping") +
+      budgetSortHeaderHTML(ev.id, "totalCost", "Total Cost") +
+      '<th></th>' +
+    '</tr></thead><tbody id="budget-rows-body" data-event="' + ev.id + '">';
   (ev.budgetItems || []).forEach(function(item){
     html += budgetRowHTML(ev.id, item);
   });
   html += '</tbody><tfoot>' +
-    '<tr><td colspan="9">Total</td><td id="bt-total">' + fmtMoney(t.total) + '</td><td></td></tr>' +
+    '<tr><td colspan="10">Total</td><td id="bt-total">' + fmtMoney(t.total) + '</td><td></td></tr>' +
     '</tfoot></table></div>';
   return html;
 }
+function budgetSortHeaderHTML(eventId, field, label){
+  var active = ui.budgetSortField === field;
+  var arrow = active ? (ui.budgetSortDir === "desc" ? " &#9660;" : " &#9650;") : "";
+  return '<th style="cursor:pointer;user-select:none;" data-action="sort-budget-items" data-event="' + eventId + '" data-field="' + field + '" title="Sort by ' + esc(label) + '">' + esc(label) + arrow + '</th>';
+}
 function budgetRowHTML(eventId, item){
   var t = budgetItemTotals(item);
-  return '<tr data-item-row="' + item.id + '">' +
+  return '<tr data-item-row="' + item.id + '" draggable="true">' +
+    '<td class="drag-handle" title="Drag to reorder">&#8942;&#8942;</td>' +
     '<td><input type="text" value="' + attr(item.general||"") + '" data-budget-field="general" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
     '<td><input type="text" value="' + attr(item.company||"") + '" data-budget-field="company" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
     '<td><input type="text" value="' + attr(item.funds||"") + '" data-budget-field="funds" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
@@ -2336,6 +2393,29 @@ var ACTIONS = {
     ev.budgetItems = (ev.budgetItems||[]).filter(function(item){ return item.id !== t.getAttribute("data-item"); });
     saveState(); render();
   },
+  "sort-budget-items": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    if (!ev) return;
+    var field = t.getAttribute("data-field");
+    var dir = (ui.budgetSortField === field && ui.budgetSortDir === "asc") ? "desc" : "asc";
+    ui.budgetSortField = field;
+    ui.budgetSortDir = dir;
+    var numericFields = { qty: 1, unitCost: 1, shipping: 1 };
+    var computedFields = { total: 1, totalCost: 1 };
+    ev.budgetItems = (ev.budgetItems || []).slice().sort(function(a, b){
+      var av, bv;
+      if (computedFields[field]){
+        av = budgetItemTotals(a)[field]; bv = budgetItemTotals(b)[field];
+      } else if (numericFields[field]){
+        av = Number(a[field]) || 0; bv = Number(b[field]) || 0;
+      } else {
+        av = (a[field] || "").toString().toLowerCase(); bv = (b[field] || "").toString().toLowerCase();
+      }
+      var cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return dir === "asc" ? cmp : -cmp;
+    });
+    saveState(); render();
+  },
 
   "add-budget-category": function(){
     state.proposedBudget = state.proposedBudget || { categories: [] };
@@ -2798,7 +2878,7 @@ function handleBackupFile(file){
     confirmModal("This will replace everything currently in the calendar (boards, events, participants, budgets) with the contents of this backup file. This can't be undone. Continue?", function(){
       state = ensureDefaults(restored);
       state.participants.forEach(migrateParticipant);
-      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", attendanceGroupCollapsed: {}, budgetChartsBoardFilter: "all" };
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", attendanceGroupCollapsed: {}, budgetChartsBoardFilter: "all", budgetSortField: null, budgetSortDir: "asc" };
       saveState(); render();
       alertModal("Backup restored successfully.", "Import complete");
     }, { title: "Restore backup?", confirmLabel: "Restore backup" });
