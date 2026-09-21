@@ -325,7 +325,8 @@ td.budget-indent{padding-left:24px;}
 .pb-empty-note{color:var(--text-faint);font-size:12.5px;padding:4px 0;}
 .pb-grand-total-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-family:var(--font-heading);font-weight:800;font-size:14px;padding:12px 16px;background:#F1F5F9;border:1px solid var(--border);border-radius:var(--radius);}
 
-.li-group{border:1px solid var(--border);border-radius:var(--radius);background:#fff;overflow:hidden;margin-bottom:18px;}
+.li-group{border:1px solid var(--border);border-radius:var(--radius);background:#fff;overflow:hidden;margin-bottom:18px;position:relative;z-index:0;}
+.li-group table.data-table th{position:static;}
 .li-group-header{display:flex;align-items:center;gap:16px;padding:16px 18px;background:var(--blue-800);}
 .li-group-toggle{border:none;background:none;color:#fff;font-size:15px;cursor:pointer;padding:4px 6px;flex-shrink:0;}
 .li-group-name{flex:1;border:1px solid transparent;background:rgba(255,255,255,0.08);color:#fff;font-family:var(--font-heading);font-weight:800;font-size:14.5px;padding:9px 12px;border-radius:6px;min-width:100px;}
@@ -1712,7 +1713,7 @@ function budgetDetailHTML(ev){
 
 function budgetItemGroupHTML(ev, g){
   var key = ev.id + ":" + g.id;
-  if (ui.lineItemGroupCollapsed[key] === undefined) ui.lineItemGroupCollapsed[key] = false;
+  if (ui.lineItemGroupCollapsed[key] === undefined) ui.lineItemGroupCollapsed[key] = true;
   var collapsed = ui.lineItemGroupCollapsed[key];
   var groupTotal = g.items.reduce(function(sum, item){ return sum + budgetItemTotals(item).totalCost; }, 0);
   var html = '<div class="li-group">';
