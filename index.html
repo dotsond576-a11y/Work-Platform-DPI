@@ -322,6 +322,19 @@ td.budget-indent{padding-left:24px;}
 .pb-grand-total-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-family:var(--font-heading);font-weight:800;font-size:14px;padding:12px 16px;background:#F1F5F9;border:1px solid var(--border);border-radius:var(--radius);}
 .pb-grand-total-row span{font-family:var(--font-mono);color:var(--blue-800);}
 
+.bsec-list{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+.bsec-card{border:1px solid var(--border);border-radius:var(--radius);background:#fff;overflow:hidden;}
+.bsec-header{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--blue-800);}
+.bsec-toggle{border:none;background:none;color:#fff;font-size:13px;cursor:pointer;padding:2px 4px;flex-shrink:0;}
+.bsec-name{flex:1;border:1px solid transparent;background:rgba(255,255,255,0.08);color:#fff;font-family:var(--font-heading);font-weight:800;font-size:13.5px;padding:6px 8px;border-radius:6px;min-width:120px;}
+.bsec-name::placeholder{color:rgba(255,255,255,0.6);}
+.bsec-name:hover, .bsec-name:focus{border-color:rgba(255,255,255,0.4);background:rgba(255,255,255,0.14);}
+.bsec-total{font-family:var(--font-mono);font-weight:700;color:#fff;white-space:nowrap;}
+.bsec-header .btn-sm{flex-shrink:0;}
+.bsec-header .row-action{color:rgba(255,255,255,0.7);}
+.bsec-header .row-action:hover{color:#fff;background:rgba(255,255,255,0.15);}
+.bsec-body .data-table-wrap{border:none;border-radius:0;}
+
 .two-col{display:flex;gap:20px;align-items:flex-start;min-height:0;}
 .side-list{width:250px;flex-shrink:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px;}
 .side-list-item{padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:2px;display:flex;justify-content:space-between;gap:6px;}
@@ -435,6 +448,20 @@ var DEFAULT_PROPOSED_BUDGET_CATEGORIES = [
   "CS Educator Workshop", "AI Ambassadors", "Summer Intensives",
   "Conferences", "Registrations/Memberships", "Miscellaneous"
 ];
+
+var DEFAULT_BUDGET_SECTIONS = [
+  "Instructor", "Stipends", "Materials", "Lunch", "Snacks/Breakfast"
+];
+
+function ensureEventBudgetSections(ev){
+  if (!ev.budgetSections){
+    ev.budgetSections = DEFAULT_BUDGET_SECTIONS.map(function(name){
+      return { id: uid(), name: name, collapsed: false };
+    });
+    saveState();
+  }
+  return ev.budgetSections;
+}
 
 function seedProposedBudgetIfNeeded(s){
   if (s.proposedBudgetSeeded) return s;
@@ -638,6 +665,16 @@ function budgetTotals(ev){
   var total = 0;
   (ev.budgetItems || []).forEach(function(item){ total += budgetItemTotals(item).totalCost; });
   return { total: total };
+}
+function budgetSectionItems(ev, sectionId){
+  return (ev.budgetItems || []).filter(function(item){ return item.sectionId === sectionId; });
+}
+function budgetSectionTotal(ev, sectionId){
+  return budgetSectionItems(ev, sectionId).reduce(function(sum, item){ return sum + budgetItemTotals(item).totalCost; }, 0);
+}
+function budgetOtherItems(ev){
+  var ids = (ev.budgetSections || []).map(function(s){ return s.id; });
+  return (ev.budgetItems || []).filter(function(item){ return !item.sectionId || ids.indexOf(item.sectionId) === -1; });
 }
 
 /* ============================================================
@@ -1339,6 +1376,7 @@ function budgetOverviewHTML(){
 }
 
 function budgetDetailHTML(ev){
+  ensureEventBudgetSections(ev);
   var t = budgetTotals(ev);
   var board = boardById(ev.boardId);
   var sub = subcategoryById(ev.boardId, ev.subcategoryId);
@@ -1348,18 +1386,62 @@ function budgetDetailHTML(ev){
     '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(ev.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + subLabel + eventDateRangeLabel(ev) + '</span></h3>' +
     '<div class="grow"></div>' +
     '<button class="btn btn-danger btn-sm" data-action="delete-event" data-id="' + ev.id + '">Delete event</button>' +
-    '<button class="btn btn-primary btn-sm" data-action="add-budget-row" data-event="' + ev.id + '">+ Add line item</button>' +
+    '<button class="btn btn-primary btn-sm" data-action="add-budget-section" data-event="' + ev.id + '">+ Add section</button>' +
   '</div>';
-  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+  html += '<div class="bsec-list">';
+  ev.budgetSections.forEach(function(section){
+    html += budgetSectionHTML(ev, section);
+  });
+  var otherItems = budgetOtherItems(ev);
+  if (otherItems.length){
+    html += budgetOtherSectionHTML(ev, otherItems);
+  }
+  html += '</div>';
+  html += '<div class="pb-grand-total-row">Total <span id="bt-total">' + fmtMoney(t.total) + '</span></div>';
+  return html;
+}
+function budgetSectionTableHTML(ev, items, tbodyId){
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
       '<th>General</th><th>Company</th><th>Funds</th><th>CFOAP</th><th>Order Date</th>' +
       '<th>Qty</th><th>Unit Cost</th><th>Total</th><th>Shipping</th><th>Total Cost</th><th></th>' +
-    '</tr></thead><tbody id="budget-rows-body">';
-  (ev.budgetItems || []).forEach(function(item){
-    html += budgetRowHTML(ev.id, item);
-  });
-  html += '</tbody><tfoot>' +
-    '<tr><td colspan="9">Total</td><td id="bt-total">' + fmtMoney(t.total) + '</td><td></td></tr>' +
-    '</tfoot></table></div>';
+    '</tr></thead><tbody' + (tbodyId ? ' id="' + tbodyId + '"' : '') + '>';
+  items.forEach(function(item){ html += budgetRowHTML(ev.id, item); });
+  html += '</tbody></table></div>';
+  return html;
+}
+function budgetSectionHTML(ev, section){
+  var items = budgetSectionItems(ev, section.id);
+  var total = budgetSectionTotal(ev, section.id);
+  var html = '<div class="bsec-card">';
+  html += '<div class="bsec-header">' +
+    '<button type="button" class="bsec-toggle" data-action="toggle-budget-section" data-event="' + ev.id + '" data-section="' + section.id + '" title="' + (section.collapsed?"Expand":"Collapse") + '">' + (section.collapsed ? "&#9656;" : "&#9662;") + '</button>' +
+    '<input type="text" class="bsec-name" value="' + attr(section.name||"") + '" placeholder="Section name" data-budget-section-field="name" data-event="' + ev.id + '" data-section="' + section.id + '">' +
+    '<span class="bsec-total" data-section-total="' + section.id + '">' + fmtMoney(total) + '</span>' +
+    '<button type="button" class="btn btn-sm" data-action="add-budget-row" data-event="' + ev.id + '" data-section="' + section.id + '">+ Line item</button>' +
+    '<button type="button" class="row-action" data-action="remove-budget-section" data-event="' + ev.id + '" data-section="' + section.id + '" title="Delete section">&times;</button>' +
+  '</div>';
+  if (!section.collapsed){
+    html += '<div class="bsec-body">';
+    html += items.length ? budgetSectionTableHTML(ev, items, "budget-rows-body-" + section.id) :
+      '<div class="pb-empty-note" style="padding:10px 12px;">No line items yet.</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+function budgetOtherSectionHTML(ev, items){
+  var total = items.reduce(function(sum, item){ return sum + budgetItemTotals(item).totalCost; }, 0);
+  var collapsed = !!ev.otherSectionCollapsed;
+  var html = '<div class="bsec-card">';
+  html += '<div class="bsec-header" style="background:var(--text-faint);">' +
+    '<button type="button" class="bsec-toggle" data-action="toggle-budget-other-section" data-event="' + ev.id + '" title="' + (collapsed?"Expand":"Collapse") + '">' + (collapsed ? "&#9656;" : "&#9662;") + '</button>' +
+    '<span class="bsec-name" style="border-color:transparent;">Other</span>' +
+    '<span class="bsec-total">' + fmtMoney(total) + '</span>' +
+  '</div>';
+  if (!collapsed){
+    html += '<div class="bsec-body">' + budgetSectionTableHTML(ev, items, null) + '</div>';
+  }
+  html += '</div>';
   return html;
 }
 function budgetRowHTML(eventId, item){
@@ -2090,13 +2172,55 @@ var ACTIONS = {
     var ev = eventById(t.getAttribute("data-event"));
     if (!ev) return;
     ev.budgetItems = ev.budgetItems || [];
-    ev.budgetItems.push({ id: uid(), general: "", company: "", funds: "", cfoap: "", orderDate: "", qty: 1, unitCost: 0, shipping: 0 });
+    var sectionId = t.getAttribute("data-section") || "";
+    ev.budgetItems.push({ id: uid(), sectionId: sectionId, general: "", company: "", funds: "", cfoap: "", orderDate: "", qty: 1, unitCost: 0, shipping: 0 });
     saveState(); render();
   },
   "remove-budget-row": function(t){
     var ev = eventById(t.getAttribute("data-event"));
     if (!ev) return;
     ev.budgetItems = (ev.budgetItems||[]).filter(function(item){ return item.id !== t.getAttribute("data-item"); });
+    saveState(); render();
+  },
+  "add-budget-section": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    if (!ev) return;
+    ensureEventBudgetSections(ev);
+    var section = { id: uid(), name: "", collapsed: false };
+    ev.budgetSections.push(section);
+    saveState(); render();
+    setTimeout(function(){
+      var el = document.querySelector('.bsec-name[data-section="' + section.id + '"]');
+      if (el) el.focus();
+    }, 30);
+  },
+  "remove-budget-section": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    if (!ev) return;
+    var sectionId = t.getAttribute("data-section");
+    var section = (ev.budgetSections||[]).find(function(s){ return s.id === sectionId; });
+    if (!section) return;
+    var items = budgetSectionItems(ev, sectionId);
+    var msg = 'Delete "' + (section.name || "this section") + '"' +
+      (items.length ? " and its " + items.length + " line item" + (items.length === 1 ? "" : "s") : "") +
+      "? This can't be undone.";
+    confirmModal(msg, function(){
+      ev.budgetItems = (ev.budgetItems||[]).filter(function(item){ return item.sectionId !== sectionId; });
+      ev.budgetSections = ev.budgetSections.filter(function(s){ return s.id !== sectionId; });
+      saveState(); render();
+    }, { title: "Delete section?" });
+  },
+  "toggle-budget-section": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    var section = ev ? (ev.budgetSections||[]).find(function(s){ return s.id === t.getAttribute("data-section"); }) : null;
+    if (!section) return;
+    section.collapsed = !section.collapsed;
+    saveState(); render();
+  },
+  "toggle-budget-other-section": function(t){
+    var ev = eventById(t.getAttribute("data-event"));
+    if (!ev) return;
+    ev.otherSectionCollapsed = !ev.otherSectionCollapsed;
     saveState(); render();
   },
 
@@ -2211,11 +2335,18 @@ document.addEventListener("input", function(e){
         var totalCostEl = document.querySelector('[data-item-total-cost="' + item.id + '"]');
         if (totalEl) totalEl.textContent = fmtMoney(itemTotals.total);
         if (totalCostEl) totalCostEl.textContent = fmtMoney(itemTotals.totalCost);
+        var sectionTotalEl = document.querySelector('[data-section-total="' + item.sectionId + '"]');
+        if (sectionTotalEl) sectionTotalEl.textContent = fmtMoney(budgetSectionTotal(ev, item.sectionId));
         var tt = budgetTotals(ev);
         var totalRowEl = document.getElementById("bt-total");
         if (totalRowEl) totalRowEl.textContent = fmtMoney(tt.total);
       }
     }
+    saveState();
+  } else if (t.matches("[data-budget-section-field]")){
+    var sev = eventById(t.getAttribute("data-event"));
+    var section = sev ? (sev.budgetSections||[]).find(function(s){ return s.id === t.getAttribute("data-section"); }) : null;
+    if (section) section[t.getAttribute("data-budget-section-field")] = t.value;
     saveState();
   } else if (t.matches("[data-subscriber-field]")){
     var board2 = boardById(t.getAttribute("data-board"));
