@@ -325,7 +325,7 @@ td.budget-indent{padding-left:24px;}
 .pb-empty-note{color:var(--text-faint);font-size:12.5px;padding:4px 0;}
 .pb-grand-total-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-family:var(--font-heading);font-weight:800;font-size:14px;padding:12px 16px;background:#F1F5F9;border:1px solid var(--border);border-radius:var(--radius);}
 
-.li-group{border:1px solid var(--border);border-radius:var(--radius);background:#fff;overflow:hidden;margin-bottom:18px;position:relative;z-index:0;}
+.li-group{border:1px solid var(--border);border-radius:var(--radius);background:#fff;overflow:hidden;margin-bottom:18px;position:relative;z-index:0;flex-shrink:0;}
 .li-group table.data-table th{position:static;}
 .li-group-header{display:flex;align-items:center;gap:16px;padding:16px 18px;background:var(--blue-800);}
 .li-group-toggle{border:none;background:none;color:#fff;font-size:15px;cursor:pointer;padding:4px 6px;flex-shrink:0;}
@@ -579,7 +579,7 @@ function seedSummerSubcategoriesIfNeeded(s){
   return s;
 }
 
-var DEFAULT_LINEITEM_CATEGORIES = ["Instructor", "Stipends", "Materials", "Lunch", "Snacks/Breakfast"];
+var DEFAULT_LINEITEM_CATEGORIES = ["Instructor", "Stipends", "Materials", "Lunch", "Snacks/Breakfast", "Transportation"];
 
 function seedLineItemCategoriesIfNeeded(s){
   if (s.lineItemCategoriesSeeded) return s;
@@ -598,8 +598,19 @@ var LINEITEM_CATEGORY_KEYWORDS = {
   "Stipends": ["stipend"],
   "Materials": ["material", "supply", "supplies", "book", "printing", "notebook", "laptop", "software", "equipment"],
   "Lunch": ["lunch"],
-  "Snacks/Breakfast": ["snack", "breakfast", "coffee", "beverage", "refreshment"]
+  "Snacks/Breakfast": ["snack", "breakfast", "coffee", "beverage", "refreshment"],
+  "Transportation": ["transportation", "travel", "mileage", "flight", "airfare", "parking", "shuttle", "taxi", "uber", "lyft", "rental car", "gas", "fuel"]
 };
+
+function seedTransportationCategoryIfNeeded(s){
+  if (s.transportationCategorySeeded) return s;
+  s.lineItemCategories = s.lineItemCategories || [];
+  if (!s.lineItemCategories.some(function(c){ return c.name === "Transportation"; })){
+    s.lineItemCategories.push({ id: uid(), name: "Transportation" });
+  }
+  s.transportationCategorySeeded = true;
+  return s;
+}
 
 function autoCategorizeLineItemsIfNeeded(s){
   if (s.lineItemAutoCategorizedSeeded) return s;
@@ -643,11 +654,13 @@ function defaultState(){
     summerSubcategoriesSeeded: false,
     lineItemCategories: [],
     lineItemCategoriesSeeded: false,
-    lineItemAutoCategorizedSeeded: false
+    lineItemAutoCategorizedSeeded: false,
+    transportationCategorySeeded: false
   };
   s = seedProposedBudgetIfNeeded(s);
   s = seedSummerSubcategoriesIfNeeded(s);
   s = seedLineItemCategoriesIfNeeded(s);
+  s = seedTransportationCategoryIfNeeded(s);
   s = autoCategorizeLineItemsIfNeeded(s);
   return seedHolidaysIfNeeded(s);
 }
@@ -703,6 +716,10 @@ function buildState(loaded){
     s.lineItemCategoriesSeeded = false;
   }
   seedLineItemCategoriesIfNeeded(s);
+  if (loaded && loaded.transportationCategorySeeded === undefined){
+    s.transportationCategorySeeded = false;
+  }
+  seedTransportationCategoryIfNeeded(s);
   if (loaded && loaded.lineItemAutoCategorizedSeeded === undefined){
     s.lineItemAutoCategorizedSeeded = false;
   }
