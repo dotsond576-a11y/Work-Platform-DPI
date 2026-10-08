@@ -340,6 +340,11 @@ span.li-group-name{background:none;color:rgba(255,255,255,0.85);font-weight:800;
 .li-group-header .li-group-delete:hover{color:#fff;background:rgba(255,255,255,0.15);}
 .pb-grand-total-row span{font-family:var(--font-mono);color:var(--blue-800);}
 
+.funding-section{margin-bottom:22px;}
+.funding-section-header{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.funding-section-header h3{margin:0;font-family:var(--font-heading);font-size:15px;color:var(--blue-800);}
+.funding-section-header .count{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);}
+
 .two-col{display:flex;gap:20px;align-items:flex-start;min-height:0;}
 .side-list{width:250px;flex-shrink:0;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px;}
 .side-list-item{padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;margin-bottom:2px;display:flex;justify-content:space-between;gap:6px;}
@@ -655,7 +660,8 @@ function defaultState(){
     lineItemCategories: [],
     lineItemCategoriesSeeded: false,
     lineItemAutoCategorizedSeeded: false,
-    transportationCategorySeeded: false
+    transportationCategorySeeded: false,
+    funding: { current: [], potential: [] }
   };
   s = seedProposedBudgetIfNeeded(s);
   s = seedSummerSubcategoriesIfNeeded(s);
@@ -1620,11 +1626,12 @@ function budgetAreasBarHTML(){
 
 function budgetViewHTML(){
   var html = '<div class="toolbar"><h2 class="page-title">Budget</h2><div class="grow"></div>' +
-    (ui.budgetTab === "proposed" ? '' : '<button class="btn btn-primary" data-action="add-event" data-date="" data-context="budget">+ New event</button>') +
+    (ui.budgetTab === "proposed" || ui.budgetTab === "funding" ? '' : '<button class="btn btn-primary" data-action="add-event" data-date="" data-context="budget">+ New event</button>') +
   '</div>';
   html += '<div class="tabs">' +
     '<button class="' + (ui.budgetTab==="overview"?"active":"") + '" data-action="budget-tab" data-tab="overview">Overview</button>' +
     '<button class="' + (ui.budgetTab==="proposed"?"active":"") + '" data-action="budget-tab" data-tab="proposed">Proposed Budget</button>' +
+    '<button class="' + (ui.budgetTab==="funding"?"active":"") + '" data-action="budget-tab" data-tab="funding">Funding</button>' +
     '<button class="' + (ui.budgetTab==="charts"?"active":"") + '" data-action="budget-tab" data-tab="charts">Charts</button>' +
   '</div>';
   if (ui.budgetTab === "detail" && ui.budgetDetailId && eventById(ui.budgetDetailId)){
@@ -1633,6 +1640,8 @@ function budgetViewHTML(){
     html += budgetAreasBarHTML() + budgetChartsHTML();
   } else if (ui.budgetTab === "proposed"){
     html += proposedBudgetHTML();
+  } else if (ui.budgetTab === "funding"){
+    html += fundingHTML();
   } else {
     ui.budgetTab = "overview";
     html += budgetAreasBarHTML() + budgetOverviewHTML();
@@ -1934,6 +1943,60 @@ function proposedBudgetHTML(){
   });
   html += '</div>';
   html += '<div class="pb-grand-total-row">Proposed total for the year <span id="pb-grand-total">' + fmtMoney(proposedBudgetGrandTotal()) + '</span></div>';
+  return html;
+}
+
+/* ============================================================
+   Funding (current + potential funding sources) view
+   ============================================================ */
+var FUNDING_SECTIONS = [["current","Current Funding"],["potential","Potential Funding"]];
+
+function fundingList(section){
+  state.funding = state.funding || { current: [], potential: [] };
+  state.funding[section] = state.funding[section] || [];
+  return state.funding[section];
+}
+
+function fundingTotal(section){
+  return fundingList(section).reduce(function(sum, f){ return sum + (Number(f.amount) || 0); }, 0);
+}
+
+function fundingHTML(){
+  var html = '';
+  FUNDING_SECTIONS.forEach(function(pair){
+    var section = pair[0], funds = fundingList(section);
+    html += '<div class="funding-section">' +
+      '<div class="funding-section-header">' +
+        '<h3>' + pair[1] + '</h3><span class="count">' + funds.length + '</span>' +
+        '<div class="grow" style="flex:1;"></div>' +
+        '<button class="btn btn-primary btn-sm" data-action="add-fund" data-section="' + section + '">+ Add fund</button>' +
+      '</div>' +
+      '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+        '<th>Fund Name</th><th>Application Date</th><th>CFOAP</th><th>Amount</th><th>Start Date</th><th>End Date</th><th>Notes</th><th></th>' +
+      '</tr></thead><tbody>';
+    if (!funds.length){
+      html += '<tr><td colspan="8" style="color:var(--text-faint);font-size:12.5px;padding:12px;">No ' + pair[1].toLowerCase() + ' yet.</td></tr>';
+    }
+    funds.forEach(function(fund){
+      var a = '" data-section="' + section + '" data-fund="' + fund.id + '"';
+      html += '<tr>' +
+        '<td><input type="text" placeholder="Fund name" value="' + attr(fund.name||"") + '" data-fund-field="name' + a + '></td>' +
+        '<td><input type="date" value="' + attr(fund.applicationDate||"") + '" data-fund-field="applicationDate' + a + '></td>' +
+        '<td><input type="text" value="' + attr(fund.cfoap||"") + '" data-fund-field="cfoap' + a + '></td>' +
+        '<td><input type="number" step="0.01" value="' + (fund.amount||0) + '" data-fund-field="amount' + a + '></td>' +
+        '<td><input type="date" value="' + attr(fund.startDate||"") + '" data-fund-field="startDate' + a + '></td>' +
+        '<td><input type="date" value="' + attr(fund.endDate||"") + '" data-fund-field="endDate' + a + '></td>' +
+        '<td><input type="text" placeholder="Notes" value="' + attr(fund.notes||"") + '" data-fund-field="notes' + a + ' style="min-width:200px;"></td>' +
+        '<td style="white-space:nowrap;">' +
+          (section === "potential" ? '<button class="btn btn-sm" data-action="move-fund-to-current' + a + ' title="Move to Current Funding">&rarr; Current</button>' : '') +
+          '<button class="row-action" data-action="remove-fund' + a + ' title="Remove fund">&times;</button>' +
+        '</td>' +
+      '</tr>';
+    });
+    html += '</tbody><tfoot>' +
+      '<tr><td colspan="3">Total</td><td id="funding-total-' + section + '">' + fmtMoney(fundingTotal(section)) + '</td><td colspan="4"></td></tr>' +
+      '</tfoot></table></div></div>';
+  });
   return html;
 }
 
@@ -2642,6 +2705,32 @@ var ACTIONS = {
       if (el) el.focus();
     }, 30);
   },
+  "add-fund": function(t){
+    var fund = { id: uid(), name: "", applicationDate: "", cfoap: "", amount: 0, startDate: "", endDate: "", notes: "" };
+    fundingList(t.getAttribute("data-section")).push(fund);
+    saveState(); render();
+    setTimeout(function(){
+      var el = document.querySelector('[data-fund-field="name"][data-fund="' + fund.id + '"]');
+      if (el) el.focus();
+    }, 30);
+  },
+  "move-fund-to-current": function(t){
+    var id = t.getAttribute("data-fund");
+    var fund = fundingList("potential").find(function(f){ return f.id === id; });
+    if (!fund) return;
+    state.funding.potential = fundingList("potential").filter(function(f){ return f.id !== id; });
+    fundingList("current").push(fund);
+    saveState(); render();
+  },
+  "remove-fund": function(t){
+    var section = t.getAttribute("data-section"), id = t.getAttribute("data-fund");
+    var fund = fundingList(section).find(function(f){ return f.id === id; });
+    if (!fund) return;
+    confirmModal('Delete "' + (fund.name || "this fund") + '"? This can\'t be undone.', function(){
+      state.funding[section] = fundingList(section).filter(function(f){ return f.id !== id; });
+      saveState(); render();
+    }, { title: "Delete fund?" });
+  },
   "remove-budget-subtopic": function(t){
     var cat = (state.proposedBudget.categories||[]).find(function(c){ return c.id === t.getAttribute("data-category"); });
     if (!cat) return;
@@ -2732,6 +2821,17 @@ document.addEventListener("input", function(e){
     var board2 = boardById(t.getAttribute("data-board"));
     var subscriber = board2 ? (board2.subscribers||[]).find(function(s){ return s.id === t.getAttribute("data-subscriber"); }) : null;
     if (subscriber) subscriber[t.getAttribute("data-subscriber-field")] = t.value;
+    saveState();
+  } else if (t.matches("[data-fund-field]")){
+    var fund = fundingList(t.getAttribute("data-section")).find(function(f){ return f.id === t.getAttribute("data-fund"); });
+    if (fund){
+      var fundField = t.getAttribute("data-fund-field");
+      fund[fundField] = fundField === "amount" ? (parseFloat(t.value) || 0) : t.value;
+      if (fundField === "amount"){
+        var fundTotalEl = document.getElementById("funding-total-" + t.getAttribute("data-section"));
+        if (fundTotalEl) fundTotalEl.textContent = fmtMoney(fundingTotal(t.getAttribute("data-section")));
+      }
+    }
     saveState();
   } else if (t.matches("[data-proposed-field]")){
     var pbCat = (state.proposedBudget.categories||[]).find(function(c){ return c.id === t.getAttribute("data-category"); });
