@@ -733,6 +733,11 @@ function buildState(loaded){
     s.proposedBudgetSeeded = false;
   }
   seedProposedBudgetIfNeeded(s);
+  if (s.proposedBudget && typeof s.proposedBudget.fiscalYear !== "number"){
+    // Existing proposed budgets were made for the year in progress; pin that
+    // so it doesn't silently become "next year" once July comes around.
+    s.proposedBudget.fiscalYear = fiscalYearOf(todayISO());
+  }
   if (loaded && loaded.summerSubcategoriesSeeded === undefined){
     s.summerSubcategoriesSeeded = false;
   }
@@ -1617,9 +1622,76 @@ function mailingListViewHTML(){
 /* ============================================================
    Budget view
    ============================================================ */
+/* School / fiscal years run July 1 - June 30 and are identified by the
+   calendar year they start in: 2026 = "2026-27" = Jul 1 2026 - Jun 30 2027. */
+var FISCAL_YEAR_START_MONTH = 7;
+function fiscalYearOf(dateStr){
+  if (!dateStr || !/^\d{4}-\d{2}/.test(dateStr)) return null;
+  var y = parseInt(dateStr.slice(0, 4), 10), m = parseInt(dateStr.slice(5, 7), 10);
+  return m >= FISCAL_YEAR_START_MONTH ? y : y - 1;
+}
+function currentFiscalYear(){ return fiscalYearOf(todayISO()); }
+function fiscalYearLabel(fy){ return fy + "\u2013" + String((fy + 1) % 100).padStart(2, "0"); }
+function fiscalYearRangeLabel(fy){ return "Jul 1, " + fy + " \u2013 Jun 30, " + (fy + 1); }
+// The year picked in the Budget page's year filter: a number, or null for all years.
+function selectedBudgetYear(){
+  if (ui.budgetYear === undefined) ui.budgetYear = String(currentFiscalYear());
+  return ui.budgetYear === "all" ? null : parseInt(ui.budgetYear, 10);
+}
+function eventInBudgetYear(ev){
+  var fy = selectedBudgetYear();
+  return fy === null || fiscalYearOf(ev.date) === fy;
+}
+// A fund counts toward a year if its start-end dates overlap it. Without
+// those, its application date decides; with no dates at all it shows in
+// every year so it never disappears.
+function fundInBudgetYear(f){
+  var fy = selectedBudgetYear();
+  if (fy === null) return true;
+  var start = f.startDate || "", end = f.endDate || "";
+  if (start || end){
+    var yStart = fy + "-07-01", yEnd = (fy + 1) + "-06-30";
+    return (!start || start <= yEnd) && (!end || end >= yStart);
+  }
+  if (f.applicationDate) return fiscalYearOf(f.applicationDate) === fy;
+  return true;
+}
+function proposedBudgetYear(){
+  var fy = state.proposedBudget && state.proposedBudget.fiscalYear;
+  return typeof fy === "number" ? fy : currentFiscalYear();
+}
+
+function budgetYearOptions(){
+  var years = {};
+  years[currentFiscalYear()] = true;
+  years[proposedBudgetYear()] = true;
+  state.events.forEach(function(e){ var fy = fiscalYearOf(e.date); if (fy !== null && (e.budgetItems || []).length) years[fy] = true; });
+  FUNDING_SECTIONS.forEach(function(pair){
+    fundingList(pair[0]).forEach(function(f){
+      [f.startDate, f.endDate, f.applicationDate].forEach(function(d){ var fy = fiscalYearOf(d); if (fy !== null) years[fy] = true; });
+    });
+  });
+  return Object.keys(years).map(Number).sort(function(a, b){ return b - a; });
+}
+
+function budgetYearBarHTML(){
+  var sel = selectedBudgetYear();
+  var current = currentFiscalYear();
+  return '<div class="sr-toolbar" style="margin-bottom:10px;">' +
+    '<label style="font-weight:600;font-size:13px;">School year</label>' +
+    '<select id="budget-year-select" style="min-width:160px;">' +
+      budgetYearOptions().map(function(fy){
+        return '<option value="' + fy + '"' + (fy === sel ? ' selected' : '') + '>' + fiscalYearLabel(fy) + (fy === current ? ' (current)' : '') + '</option>';
+      }).join("") +
+      '<option value="all"' + (sel === null ? ' selected' : '') + '>All years</option>' +
+    '</select>' +
+    '<span style="font-size:12px;color:var(--text-faint);">' + (sel === null ? 'Showing every year' : fiscalYearRangeLabel(sel)) + '</span>' +
+  '</div>';
+}
+
 function budgetEvents(){
   var ids = state.budgetBoardIds || [];
-  return sortedEvents().filter(function(e){ return ids.indexOf(e.boardId) !== -1; });
+  return sortedEvents().filter(function(e){ return ids.indexOf(e.boardId) !== -1 && eventInBudgetYear(e); });
 }
 
 function budgetAreasBarHTML(){
@@ -1657,16 +1729,16 @@ function budgetViewHTML(){
   if (ui.budgetTab === "detail" && ui.budgetDetailId && eventById(ui.budgetDetailId)){
     html += budgetDetailHTML(eventById(ui.budgetDetailId));
   } else if (ui.budgetTab === "charts"){
-    html += budgetAreasBarHTML() + budgetChartsHTML();
+    html += budgetYearBarHTML() + budgetAreasBarHTML() + budgetChartsHTML();
   } else if (ui.budgetTab === "proposed"){
     html += proposedBudgetHTML();
   } else if (ui.budgetTab === "funding"){
     html += fundingHTML();
   } else if (ui.budgetTab === "sources"){
-    html += sourceReportHTML();
+    html += budgetYearBarHTML() + sourceReportHTML();
   } else {
     ui.budgetTab = "overview";
-    html += budgetAreasBarHTML() + budgetOverviewHTML();
+    html += budgetYearBarHTML() + budgetAreasBarHTML() + budgetOverviewHTML();
   }
   return html;
 }
@@ -1697,7 +1769,11 @@ function budgetEventGroups(){
 
 function budgetOverviewHTML(){
   var events = budgetEvents();
-  if (!events.length) return emptyState("No events yet.", "Create an event to start tracking its budget.");
+  if (!events.length){
+    return selectedBudgetYear() === null
+      ? emptyState("No events yet.", "Create an event to start tracking its budget.")
+      : emptyState("No events in " + fiscalYearLabel(selectedBudgetYear()) + ".", "Pick a different school year above, or create an event dated in this year.");
+  }
   var groups = budgetEventGroups();
   var grandTotal = 0;
   var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>Date</th><th>Total Cost</th><th></th></tr></thead><tbody>';
@@ -1930,7 +2006,15 @@ function proposedBudgetGrandTotal(){
 
 function proposedBudgetHTML(){
   var categories = (state.proposedBudget && state.proposedBudget.categories) || [];
-  var html = '<div class="toolbar" style="margin-bottom:14px;"><div class="grow"></div>' +
+  var pbYear = proposedBudgetYear(), cy = currentFiscalYear();
+  var pbYears = [];
+  for (var y = Math.min(pbYear, cy) - 2; y <= Math.max(pbYear, cy) + 2; y++) pbYears.push(y);
+  var html = '<div class="toolbar" style="margin-bottom:14px;">' +
+    '<div class="sr-toolbar" style="margin:0;"><label style="font-weight:600;font-size:13px;">Budget year</label>' +
+      '<select id="proposed-budget-year-select" style="min-width:140px;">' +
+        pbYears.map(function(fy){ return '<option value="' + fy + '"' + (fy === pbYear ? ' selected' : '') + '>' + fiscalYearLabel(fy) + '</option>'; }).join("") +
+      '</select></div>' +
+    '<div class="grow"></div>' +
     '<button class="btn btn-primary btn-sm" data-action="add-budget-category">+ Add category</button>' +
   '</div>';
   if (!categories.length){
@@ -2088,12 +2172,14 @@ function addFundingSourceModal(onAdded){
 // Proposed Budget, and actual spending from event budget line items.
 function sourceReportData(source){
   var allocations = [], spending = [];
-  ((state.proposedBudget && state.proposedBudget.categories) || []).forEach(function(cat){
+  var fy = selectedBudgetYear();
+  var includeAllocations = fy === null || fy === proposedBudgetYear();
+  (includeAllocations ? ((state.proposedBudget && state.proposedBudget.categories) || []) : []).forEach(function(cat){
     (cat.subtopics || []).forEach(function(sub){
       if (sameSource(sub.fundingSource, source)) allocations.push({ category: cat.name || "", subtopic: sub.name || "", amount: Number(sub.amount) || 0 });
     });
   });
-  sortedEvents().forEach(function(ev){
+  sortedEvents().filter(eventInBudgetYear).forEach(function(ev){
     (ev.budgetItems || []).forEach(function(item){
       if (sameSource(item.funds, source)) spending.push({ event: ev.title || "", eventDate: ev.date || "", general: item.general || "", company: item.company || "", cfoap: item.cfoap || "", orderDate: item.orderDate || "", amount: budgetItemTotals(item).totalCost });
     });
@@ -2101,15 +2187,18 @@ function sourceReportData(source){
   var funds = [];
   FUNDING_SECTIONS.forEach(function(pair){
     fundingList(pair[0]).forEach(function(f){
-      if (sameSource(f.source, source)) funds.push({ status: pair[0] === "current" ? "Current" : "Potential", name: f.name || "", applicationDate: f.applicationDate || "", cfoap: f.cfoap || "", amount: Number(f.amount) || 0, startDate: f.startDate || "", endDate: f.endDate || "", notes: f.notes || "" });
+      if (sameSource(f.source, source) && fundInBudgetYear(f)) funds.push({ status: pair[0] === "current" ? "Current" : "Potential", name: f.name || "", applicationDate: f.applicationDate || "", cfoap: f.cfoap || "", amount: Number(f.amount) || 0, startDate: f.startDate || "", endDate: f.endDate || "", notes: f.notes || "" });
     });
   });
   var awarded = funds.reduce(function(t, f){ return t + (f.status === "Current" ? f.amount : 0); }, 0);
   var pending = funds.reduce(function(t, f){ return t + (f.status === "Potential" ? f.amount : 0); }, 0);
   var allocated = allocations.reduce(function(t, a){ return t + a.amount; }, 0);
   var spent = spending.reduce(function(t, x){ return t + x.amount; }, 0);
-  return { funds: funds, allocations: allocations, spending: spending, awarded: awarded, pending: pending, allocated: allocated, spent: spent, remaining: allocated - spent };
+  return { funds: funds, allocations: allocations, spending: spending, awarded: awarded, pending: pending, allocated: allocated, spent: spent, remaining: includeAllocations ? allocated - spent : null };
 }
+
+// Remaining is only meaningful against a Proposed Budget for that year.
+function fmtRemaining(r){ return r === null ? "\u2014" : fmtMoney(r); }
 
 function sourceReportHTML(){
   var sources = fundingSources();
@@ -2146,7 +2235,7 @@ function sourceReportHTML(){
         '<td class="sr-money">' + fmtMoney(d.pending) + '</td>' +
         '<td class="sr-money">' + fmtMoney(d.allocated) + '</td>' +
         '<td class="sr-money">' + fmtMoney(d.spent) + '</td>' +
-        '<td class="sr-money"' + (d.remaining < 0 ? ' style="color:#DC2626;"' : '') + '>' + fmtMoney(d.remaining) + '</td>' +
+        '<td class="sr-money"' + (d.remaining < 0 ? ' style="color:#DC2626;"' : '') + '>' + fmtRemaining(d.remaining) + '</td>' +
       '</tr>';
     });
     html += '</tbody><tfoot><tr><td>Total</td>' +
@@ -2154,7 +2243,7 @@ function sourceReportHTML(){
       '<td class="sr-money">' + fmtMoney(sumPending) + '</td>' +
       '<td class="sr-money">' + fmtMoney(sumAllocated) + '</td>' +
       '<td class="sr-money">' + fmtMoney(sumSpent) + '</td>' +
-      '<td class="sr-money">' + fmtMoney(sumAllocated - sumSpent) + '</td>' +
+      '<td class="sr-money">' + fmtRemaining(sourceReportData("").remaining === null ? null : sumAllocated - sumSpent) + '</td>' +
     '</tr></tfoot></table></div>';
     return html;
   }
@@ -2165,7 +2254,7 @@ function sourceReportHTML(){
     '<div class="sr-stat"><div class="sr-stat-label">Pending (Potential Funding)</div><div class="sr-stat-value">' + fmtMoney(d.pending) + '</div></div>' +
     '<div class="sr-stat"><div class="sr-stat-label">Allocated (Proposed Budget)</div><div class="sr-stat-value">' + fmtMoney(d.allocated) + '</div></div>' +
     '<div class="sr-stat"><div class="sr-stat-label">Spent (event line items)</div><div class="sr-stat-value">' + fmtMoney(d.spent) + '</div></div>' +
-    '<div class="sr-stat"><div class="sr-stat-label">Remaining (allocated &minus; spent)</div><div class="sr-stat-value' + (d.remaining < 0 ? ' over' : '') + '">' + fmtMoney(d.remaining) + '</div></div>' +
+    '<div class="sr-stat"><div class="sr-stat-label">Remaining (allocated &minus; spent)</div><div class="sr-stat-value' + (d.remaining < 0 ? ' over' : '') + '">' + fmtRemaining(d.remaining) + '</div></div>' +
   '</div>';
 
   html += '<h3 class="sr-section-title">Funds &amp; Grants</h3>';
@@ -2181,7 +2270,10 @@ function sourceReportHTML(){
 
   html += '<h3 class="sr-section-title">Allocations</h3>';
   if (!d.allocations.length){
-    html += '<div class="pb-empty-note">No Proposed Budget subtopics use ' + esc(selected) + ' yet.</div>';
+    var fyNow = selectedBudgetYear();
+    html += '<div class="pb-empty-note">' + (fyNow !== null && fyNow !== proposedBudgetYear()
+      ? 'The Proposed Budget is set to ' + fiscalYearLabel(proposedBudgetYear()) + ', so it has no allocations for ' + fiscalYearLabel(fyNow) + '.'
+      : 'No Proposed Budget subtopics use ' + esc(selected) + ' yet.') + '</div>';
   } else {
     html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Category</th><th>Subtopic</th><th style="text-align:right;">Amount</th></tr></thead><tbody>';
     d.allocations.forEach(function(a){
@@ -2192,7 +2284,7 @@ function sourceReportHTML(){
 
   html += '<h3 class="sr-section-title">Spending</h3>';
   if (!d.spending.length){
-    html += '<div class="pb-empty-note">No event line items have Funds set to ' + esc(selected) + ' yet.</div>';
+    html += '<div class="pb-empty-note">No event line items' + (selectedBudgetYear() !== null ? ' in ' + fiscalYearLabel(selectedBudgetYear()) : '') + ' have Funds set to ' + esc(selected) + '.</div>';
   } else {
     html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>General</th><th>Company</th><th>CFOAP</th><th>Order Date</th><th style="text-align:right;">Total Cost</th></tr></thead><tbody>';
     d.spending.forEach(function(x){
@@ -2207,22 +2299,23 @@ function exportSourceReportCSV(){
   var selected = ui.sourceReportSource || "";
   var rows, filename;
   if (!selected){
-    rows = [["Funding Source", "Awarded (Current)", "Pending (Potential)", "Allocated (Proposed)", "Spent (Events)", "Remaining"]];
+    rows = [["School year", selectedBudgetYear() === null ? "All years" : fiscalYearLabel(selectedBudgetYear())], [],
+      ["Funding Source", "Awarded (Current)", "Pending (Potential)", "Allocated (Proposed)", "Spent (Events)", "Remaining"]];
     fundingSources().forEach(function(n){
       var d = sourceReportData(n);
-      rows.push([n, d.awarded.toFixed(2), d.pending.toFixed(2), d.allocated.toFixed(2), d.spent.toFixed(2), d.remaining.toFixed(2)]);
+      rows.push([n, d.awarded.toFixed(2), d.pending.toFixed(2), d.allocated.toFixed(2), d.spent.toFixed(2), d.remaining === null ? "" : d.remaining.toFixed(2)]);
     });
-    filename = "funding-sources-summary.csv";
+    filename = "funding-sources-summary-" + (selectedBudgetYear() === null ? "all-years" : fiscalYearLabel(selectedBudgetYear()).replace("\u2013", "-")) + ".csv";
   } else {
     var d = sourceReportData(selected);
-    rows = [["Funding source", selected], ["Awarded", d.awarded.toFixed(2)], ["Pending", d.pending.toFixed(2)], ["Allocated", d.allocated.toFixed(2)], ["Spent", d.spent.toFixed(2)], ["Remaining", d.remaining.toFixed(2)], [],
+    rows = [["Funding source", selected], ["School year", selectedBudgetYear() === null ? "All years" : fiscalYearLabel(selectedBudgetYear())], ["Awarded", d.awarded.toFixed(2)], ["Pending", d.pending.toFixed(2)], ["Allocated", d.allocated.toFixed(2)], ["Spent", d.spent.toFixed(2)], ["Remaining", d.remaining === null ? "" : d.remaining.toFixed(2)], [],
       ["FUNDS & GRANTS"], ["Status", "Fund Name", "Application Date", "CFOAP", "Start Date", "End Date", "Notes", "Amount"]];
     d.funds.forEach(function(f){ rows.push([f.status, f.name, f.applicationDate, f.cfoap, f.startDate, f.endDate, f.notes, f.amount.toFixed(2)]); });
     rows.push([], ["ALLOCATIONS"], ["Category", "Subtopic", "Amount"]);
     d.allocations.forEach(function(a){ rows.push([a.category, a.subtopic, a.amount.toFixed(2)]); });
     rows.push([], ["SPENDING"], ["Event", "Event Date", "General", "Company", "CFOAP", "Order Date", "Total Cost"]);
     d.spending.forEach(function(x){ rows.push([x.event, x.eventDate, x.general, x.company, x.cfoap, x.orderDate, x.amount.toFixed(2)]); });
-    filename = "funding-source-" + selected.replace(/[^a-z0-9]+/gi, "-").toLowerCase() + ".csv";
+    filename = "funding-source-" + selected.replace(/[^a-z0-9]+/gi, "-").toLowerCase() + "-" + (selectedBudgetYear() === null ? "all-years" : fiscalYearLabel(selectedBudgetYear()).replace("\u2013", "-")) + ".csv";
   }
   downloadCSVRows(rows, filename);
 }
@@ -3127,6 +3220,13 @@ document.addEventListener("change", function(e){
   if (t.matches("#event-form select[name='boardId']")){
     var wrap = document.getElementById("subcat-wrap");
     if (wrap) wrap.innerHTML = subcategoryFieldHTML(boardById(t.value), null);
+  } else if (t.matches("#budget-year-select")){
+    ui.budgetYear = t.value;
+    render();
+  } else if (t.matches("#proposed-budget-year-select")){
+    state.proposedBudget = state.proposedBudget || { categories: [] };
+    state.proposedBudget.fiscalYear = parseInt(t.value, 10);
+    saveState(); render();
   } else if (t.matches("#source-report-select")){
     ui.sourceReportSource = t.value;
     render();
