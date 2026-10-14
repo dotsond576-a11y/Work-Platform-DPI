@@ -322,6 +322,22 @@ td.budget-indent{padding-left:24px;}
 .pb-subtopic-row{display:flex;align-items:center;gap:8px;}
 .pb-subtopic-row input[type="text"]{flex:1;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;}
 .pb-subtopic-row input[type="number"]{width:120px;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;font-family:var(--font-mono);}
+.pb-subtopic-row select{width:170px;border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:13px;background:#fff;}
+.pb-subtopic-row select.unset{color:var(--text-faint);}
+.sr-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+.sr-toolbar label{display:inline;margin:0;}
+.sr-toolbar select{border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;background:#fff;min-width:200px;width:auto;}
+.sr-sources{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px;font-size:12px;color:var(--text-faint);}
+.sr-chip{display:inline-flex;align-items:center;gap:4px;background:var(--blue-100);color:var(--blue-800);border-radius:999px;padding:3px 6px 3px 10px;font-size:12.5px;font-weight:600;}
+.sr-chip button{border:none;background:none;cursor:pointer;color:var(--blue-800);opacity:0.6;font-size:14px;line-height:1;padding:0 2px;}
+.sr-chip button:hover{opacity:1;}
+.sr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px;}
+.sr-stat{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;}
+.sr-stat-label{font-size:12px;color:var(--text-muted);margin-bottom:4px;}
+.sr-stat-value{font-family:var(--font-mono);font-weight:700;font-size:18px;color:var(--blue-800);}
+.sr-stat-value.over{color:#DC2626;}
+.sr-section-title{margin:18px 0 8px;font-family:var(--font-heading);font-size:15px;color:var(--blue-800);}
+td.sr-money{font-family:var(--font-mono);text-align:right;white-space:nowrap;}
 .pb-empty-note{color:var(--text-faint);font-size:12.5px;padding:4px 0;}
 .pb-grand-total-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-family:var(--font-heading);font-weight:800;font-size:14px;padding:12px 16px;background:#F1F5F9;border:1px solid var(--border);border-radius:var(--radius);}
 
@@ -638,6 +654,8 @@ function autoCategorizeLineItemsIfNeeded(s){
   return s;
 }
 
+var DEFAULT_FUNDING_SOURCES = ["Apple", "CME Group", "Fry Foundation", "Google"];
+
 function defaultState(){
   var s = {
     title: "DPI Teacher Training Calendar",
@@ -661,7 +679,8 @@ function defaultState(){
     lineItemCategoriesSeeded: false,
     lineItemAutoCategorizedSeeded: false,
     transportationCategorySeeded: false,
-    funding: { current: [], potential: [] }
+    funding: { current: [], potential: [] },
+    fundingSources: DEFAULT_FUNDING_SOURCES.slice()
   };
   s = seedProposedBudgetIfNeeded(s);
   s = seedSummerSubcategoriesIfNeeded(s);
@@ -1626,12 +1645,13 @@ function budgetAreasBarHTML(){
 
 function budgetViewHTML(){
   var html = '<div class="toolbar"><h2 class="page-title">Budget</h2><div class="grow"></div>' +
-    (ui.budgetTab === "proposed" || ui.budgetTab === "funding" ? '' : '<button class="btn btn-primary" data-action="add-event" data-date="" data-context="budget">+ New event</button>') +
+    (ui.budgetTab === "proposed" || ui.budgetTab === "funding" || ui.budgetTab === "sources" ? '' : '<button class="btn btn-primary" data-action="add-event" data-date="" data-context="budget">+ New event</button>') +
   '</div>';
   html += '<div class="tabs">' +
     '<button class="' + (ui.budgetTab==="overview"?"active":"") + '" data-action="budget-tab" data-tab="overview">Overview</button>' +
     '<button class="' + (ui.budgetTab==="proposed"?"active":"") + '" data-action="budget-tab" data-tab="proposed">Proposed Budget</button>' +
     '<button class="' + (ui.budgetTab==="funding"?"active":"") + '" data-action="budget-tab" data-tab="funding">Funding</button>' +
+    '<button class="' + (ui.budgetTab==="sources"?"active":"") + '" data-action="budget-tab" data-tab="sources">Source Report</button>' +
     '<button class="' + (ui.budgetTab==="charts"?"active":"") + '" data-action="budget-tab" data-tab="charts">Charts</button>' +
   '</div>';
   if (ui.budgetTab === "detail" && ui.budgetDetailId && eventById(ui.budgetDetailId)){
@@ -1642,6 +1662,8 @@ function budgetViewHTML(){
     html += proposedBudgetHTML();
   } else if (ui.budgetTab === "funding"){
     html += fundingHTML();
+  } else if (ui.budgetTab === "sources"){
+    html += sourceReportHTML();
   } else {
     ui.budgetTab = "overview";
     html += budgetAreasBarHTML() + budgetOverviewHTML();
@@ -1790,7 +1812,7 @@ function budgetRowHTML(eventId, item){
     '<td class="drag-handle" title="Drag to reorder">&#8942;&#8942;</td>' +
     '<td><input type="text" value="' + attr(item.general||"") + '" data-budget-field="general" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
     '<td><input type="text" value="' + attr(item.company||"") + '" data-budget-field="company" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
-    '<td><input type="text" value="' + attr(item.funds||"") + '" data-budget-field="funds" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
+    '<td>' + fundingSourceSelectHTML(item.funds, 'data-budget-field="funds" data-event="' + eventId + '" data-item="' + item.id + '"', "—") + '</td>' +
     '<td><input type="text" value="' + attr(item.cfoap||"") + '" data-budget-field="cfoap" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
     '<td><input type="date" value="' + attr(item.orderDate||"") + '" data-budget-field="orderDate" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
     '<td><input type="number" step="1" value="' + (item.qty||0) + '" data-budget-field="qty" data-event="' + eventId + '" data-item="' + item.id + '"></td>' +
@@ -1933,6 +1955,7 @@ function proposedBudgetHTML(){
       subtopics.forEach(function(sub){
         html += '<div class="pb-subtopic-row">' +
           '<input type="text" value="' + attr(sub.name||"") + '" placeholder="Subtopic" data-proposed-field="name" data-category="' + cat.id + '" data-subtopic="' + sub.id + '">' +
+          fundingSourceSelectHTML(sub.fundingSource, 'data-proposed-field="fundingSource" data-category="' + cat.id + '" data-subtopic="' + sub.id + '"', "Funding source") +
           '<input type="number" step="0.01" value="' + (sub.amount||0) + '" data-proposed-field="amount" data-category="' + cat.id + '" data-subtopic="' + sub.id + '">' +
           '<button type="button" class="row-action" data-action="remove-budget-subtopic" data-category="' + cat.id + '" data-subtopic="' + sub.id + '" title="Remove subtopic">&times;</button>' +
         '</div>';
@@ -1998,6 +2021,164 @@ function fundingHTML(){
       '</tfoot></table></div></div>';
   });
   return html;
+}
+
+/* ============================================================
+   Funding sources (shared dropdown list) + Source Report view
+   ============================================================ */
+var NEW_SOURCE_OPTION = "__new_source__";
+
+function fundingSources(){
+  state.fundingSources = state.fundingSources || [];
+  return state.fundingSources;
+}
+function sameSource(a, b){
+  return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase();
+}
+
+// A <select> listing every funding source. A value that isn't in the list
+// (e.g. free text typed into a line item's Funds before this was a
+// dropdown) is kept as its own option so it's never silently lost.
+function fundingSourceSelectHTML(value, attrs, placeholder){
+  value = value || "";
+  var names = fundingSources().slice();
+  if (value && !names.some(function(n){ return sameSource(n, value); })) names.push(value);
+  return '<select ' + attrs + ' data-source-select="1"' + (value ? '' : ' class="unset"') + '>' +
+    '<option value="">' + esc(placeholder) + '</option>' +
+    names.map(function(n){ return '<option value="' + attr(n) + '"' + (sameSource(n, value) ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") +
+    '<option value="' + NEW_SOURCE_OPTION + '">+ Add new source&hellip;</option>' +
+  '</select>';
+}
+
+function addFundingSourceModal(onAdded){
+  openModal('<form data-submit-action="submit-add-funding-source">' +
+    '<div class="modal-header"><h3>Add funding source</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
+    '<div class="modal-body">' +
+      '<div class="field"><label>Source name</label><input type="text" name="sourceName" required placeholder="e.g. Microsoft"></div>' +
+    '</div>' +
+    '<div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button type="submit" class="btn btn-primary">Add source</button></div>' +
+  '</form>');
+  ui.onFundingSourceAdded = onAdded || null;
+  setTimeout(function(){
+    var el = document.querySelector('#modal-root input[name="sourceName"]');
+    if (el) el.focus();
+  }, 30);
+}
+
+// Everything the report needs for one source: proposed allocations from the
+// Proposed Budget, and actual spending from event budget line items.
+function sourceReportData(source){
+  var allocations = [], spending = [];
+  ((state.proposedBudget && state.proposedBudget.categories) || []).forEach(function(cat){
+    (cat.subtopics || []).forEach(function(sub){
+      if (sameSource(sub.fundingSource, source)) allocations.push({ category: cat.name || "", subtopic: sub.name || "", amount: Number(sub.amount) || 0 });
+    });
+  });
+  sortedEvents().forEach(function(ev){
+    (ev.budgetItems || []).forEach(function(item){
+      if (sameSource(item.funds, source)) spending.push({ event: ev.title || "", eventDate: ev.date || "", general: item.general || "", company: item.company || "", cfoap: item.cfoap || "", orderDate: item.orderDate || "", amount: budgetItemTotals(item).totalCost });
+    });
+  });
+  var allocated = allocations.reduce(function(t, a){ return t + a.amount; }, 0);
+  var spent = spending.reduce(function(t, x){ return t + x.amount; }, 0);
+  return { allocations: allocations, spending: spending, allocated: allocated, spent: spent, remaining: allocated - spent };
+}
+
+function sourceReportHTML(){
+  var sources = fundingSources();
+  var selected = ui.sourceReportSource || "";
+  if (selected && !sources.some(function(n){ return sameSource(n, selected); })) selected = ui.sourceReportSource = "";
+  var html = '<div class="sr-toolbar">' +
+    '<label style="font-weight:600;font-size:13px;">Report for</label>' +
+    '<select id="source-report-select">' +
+      '<option value="">All sources (summary)</option>' +
+      sources.map(function(n){ return '<option value="' + attr(n) + '"' + (n === selected ? ' selected' : '') + '>' + esc(n) + '</option>'; }).join("") +
+    '</select>' +
+    '<div class="grow" style="flex:1;"></div>' +
+    '<button class="btn btn-sm" data-action="export-source-report">Download CSV</button>' +
+  '</div>';
+  html += '<div class="sr-sources">Funding sources:' +
+    sources.map(function(n){
+      return '<span class="sr-chip">' + esc(n) + '<button type="button" data-action="remove-funding-source" data-name="' + attr(n) + '" title="Remove from list">&times;</button></span>';
+    }).join("") +
+    '<button type="button" class="btn btn-sm" data-action="add-funding-source">+ Add source</button>' +
+  '</div>';
+
+  if (!selected){
+    if (!sources.length) return html + emptyState("No funding sources yet.", "Add a source, then pick it on Proposed Budget subtopics and event line items.");
+    var sumAllocated = 0, sumSpent = 0;
+    html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+      '<th>Funding Source</th><th style="text-align:right;">Allocated (Proposed)</th><th style="text-align:right;">Spent (Events)</th><th style="text-align:right;">Remaining</th>' +
+    '</tr></thead><tbody>';
+    sources.forEach(function(n){
+      var d = sourceReportData(n);
+      sumAllocated += d.allocated; sumSpent += d.spent;
+      html += '<tr>' +
+        '<td><a href="#" data-action="open-source-report" data-name="' + attr(n) + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(n) + '</a></td>' +
+        '<td class="sr-money">' + fmtMoney(d.allocated) + '</td>' +
+        '<td class="sr-money">' + fmtMoney(d.spent) + '</td>' +
+        '<td class="sr-money"' + (d.remaining < 0 ? ' style="color:#DC2626;"' : '') + '>' + fmtMoney(d.remaining) + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody><tfoot><tr><td>Total</td>' +
+      '<td class="sr-money">' + fmtMoney(sumAllocated) + '</td>' +
+      '<td class="sr-money">' + fmtMoney(sumSpent) + '</td>' +
+      '<td class="sr-money">' + fmtMoney(sumAllocated - sumSpent) + '</td>' +
+    '</tr></tfoot></table></div>';
+    return html;
+  }
+
+  var d = sourceReportData(selected);
+  html += '<div class="sr-stats">' +
+    '<div class="sr-stat"><div class="sr-stat-label">Allocated (Proposed Budget)</div><div class="sr-stat-value">' + fmtMoney(d.allocated) + '</div></div>' +
+    '<div class="sr-stat"><div class="sr-stat-label">Spent (event line items)</div><div class="sr-stat-value">' + fmtMoney(d.spent) + '</div></div>' +
+    '<div class="sr-stat"><div class="sr-stat-label">Remaining</div><div class="sr-stat-value' + (d.remaining < 0 ? ' over' : '') + '">' + fmtMoney(d.remaining) + '</div></div>' +
+  '</div>';
+
+  html += '<h3 class="sr-section-title">Allocations</h3>';
+  if (!d.allocations.length){
+    html += '<div class="pb-empty-note">No Proposed Budget subtopics use ' + esc(selected) + ' yet.</div>';
+  } else {
+    html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Category</th><th>Subtopic</th><th style="text-align:right;">Amount</th></tr></thead><tbody>';
+    d.allocations.forEach(function(a){
+      html += '<tr><td>' + esc(a.category) + '</td><td>' + esc(a.subtopic) + '</td><td class="sr-money">' + fmtMoney(a.amount) + '</td></tr>';
+    });
+    html += '</tbody><tfoot><tr><td colspan="2">Total allocated</td><td class="sr-money">' + fmtMoney(d.allocated) + '</td></tr></tfoot></table></div>';
+  }
+
+  html += '<h3 class="sr-section-title">Spending</h3>';
+  if (!d.spending.length){
+    html += '<div class="pb-empty-note">No event line items have Funds set to ' + esc(selected) + ' yet.</div>';
+  } else {
+    html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>General</th><th>Company</th><th>CFOAP</th><th>Order Date</th><th style="text-align:right;">Total Cost</th></tr></thead><tbody>';
+    d.spending.forEach(function(x){
+      html += '<tr><td>' + esc(x.event) + '</td><td>' + esc(x.general) + '</td><td>' + esc(x.company) + '</td><td>' + esc(x.cfoap) + '</td><td>' + esc(x.orderDate) + '</td><td class="sr-money">' + fmtMoney(x.amount) + '</td></tr>';
+    });
+    html += '</tbody><tfoot><tr><td colspan="5">Total spent</td><td class="sr-money">' + fmtMoney(d.spent) + '</td></tr></tfoot></table></div>';
+  }
+  return html;
+}
+
+function exportSourceReportCSV(){
+  var selected = ui.sourceReportSource || "";
+  var rows, filename;
+  if (!selected){
+    rows = [["Funding Source", "Allocated (Proposed)", "Spent (Events)", "Remaining"]];
+    fundingSources().forEach(function(n){
+      var d = sourceReportData(n);
+      rows.push([n, d.allocated.toFixed(2), d.spent.toFixed(2), d.remaining.toFixed(2)]);
+    });
+    filename = "funding-sources-summary.csv";
+  } else {
+    var d = sourceReportData(selected);
+    rows = [["Funding source", selected], ["Allocated", d.allocated.toFixed(2)], ["Spent", d.spent.toFixed(2)], ["Remaining", d.remaining.toFixed(2)], [],
+      ["ALLOCATIONS"], ["Category", "Subtopic", "Amount"]];
+    d.allocations.forEach(function(a){ rows.push([a.category, a.subtopic, a.amount.toFixed(2)]); });
+    rows.push([], ["SPENDING"], ["Event", "Event Date", "General", "Company", "CFOAP", "Order Date", "Total Cost"]);
+    d.spending.forEach(function(x){ rows.push([x.event, x.eventDate, x.general, x.company, x.cfoap, x.orderDate, x.amount.toFixed(2)]); });
+    filename = "funding-source-" + selected.replace(/[^a-z0-9]+/gi, "-").toLowerCase() + ".csv";
+  }
+  downloadCSVRows(rows, filename);
 }
 
 /* ============================================================
@@ -2714,6 +2895,27 @@ var ACTIONS = {
       if (el) el.focus();
     }, 30);
   },
+  "add-funding-source": function(){ addFundingSourceModal(function(){ render(); }); },
+  "submit-add-funding-source": function(form){
+    var name = (form.querySelector('[name="sourceName"]').value || "").trim();
+    if (!name) return;
+    var existing = fundingSources().find(function(n){ return sameSource(n, name); });
+    if (!existing){ fundingSources().push(name); existing = name; }
+    closeModal();
+    saveState();
+    var cb = ui.onFundingSourceAdded; ui.onFundingSourceAdded = null;
+    if (cb) cb(existing); else render();
+  },
+  "remove-funding-source": function(t){
+    var name = t.getAttribute("data-name");
+    confirmModal('Remove "' + name + '" from the funding source list? Subtopics and line items already set to it keep their value.', function(){
+      state.fundingSources = fundingSources().filter(function(n){ return n !== name; });
+      if (ui.sourceReportSource === name) ui.sourceReportSource = "";
+      saveState(); render();
+    }, { title: "Remove funding source?", confirmLabel: "Remove" });
+  },
+  "open-source-report": function(t){ ui.sourceReportSource = t.getAttribute("data-name"); render(); },
+  "export-source-report": function(){ exportSourceReportCSV(); },
   "move-fund-to-current": function(t){
     var id = t.getAttribute("data-fund");
     var fund = fundingList("potential").find(function(f){ return f.id === id; });
@@ -2780,6 +2982,27 @@ document.addEventListener("submit", function(e){
 /* Live field edits: participant fields + budget line items */
 document.addEventListener("input", function(e){
   var t = e.target;
+  if (t.matches("select[data-source-select]")){
+    t.classList.toggle("unset", !t.value);
+    if (t.value === NEW_SOURCE_OPTION){
+      // Put the select back to its saved value, then ask for the new name and
+      // apply it to this row once added.
+      var row = t;
+      var field = row.getAttribute("data-proposed-field") ? "proposed" : "budget";
+      var target = field === "proposed"
+        ? ((state.proposedBudget.categories||[]).find(function(c){ return c.id === row.getAttribute("data-category"); }) || {subtopics:[]}).subtopics.find(function(s){ return s.id === row.getAttribute("data-subtopic"); })
+        : ((eventById(row.getAttribute("data-event")) || {}).budgetItems || []).find(function(i){ return i.id === row.getAttribute("data-item"); });
+      row.value = target ? (field === "proposed" ? (target.fundingSource || "") : (target.funds || "")) : "";
+      addFundingSourceModal(function(name){
+        if (target){
+          if (field === "proposed") target.fundingSource = name; else target.funds = name;
+          saveState();
+        }
+        render();
+      });
+      return;
+    }
+  }
   if (t.matches("[data-participant][data-field]")){
     var p = participantById(t.getAttribute("data-participant"));
     if (p) p[t.getAttribute("data-field")] = t.value;
@@ -2865,6 +3088,9 @@ document.addEventListener("change", function(e){
   if (t.matches("#event-form select[name='boardId']")){
     var wrap = document.getElementById("subcat-wrap");
     if (wrap) wrap.innerHTML = subcategoryFieldHTML(boardById(t.value), null);
+  } else if (t.matches("#source-report-select")){
+    ui.sourceReportSource = t.value;
+    render();
   } else if (t.matches("#add-budget-board-select")){
     if (t.value){
       state.budgetBoardIds = state.budgetBoardIds || [];
