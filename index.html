@@ -336,7 +336,17 @@ td.budget-indent{padding-left:24px;}
 .sr-stat-label{font-size:12px;color:var(--text-muted);margin-bottom:4px;}
 .sr-stat-value{font-family:var(--font-mono);font-weight:700;font-size:18px;color:var(--blue-800);}
 .sr-stat-value.over{color:#DC2626;}
-.sr-section-title{margin:18px 0 8px;font-family:var(--font-heading);font-size:15px;color:var(--blue-800);}
+.sr-card{margin-bottom:12px;flex-shrink:0;}
+.sr-card-title{flex:1;color:#fff;font-family:var(--font-heading);font-weight:800;font-size:13.5px;padding:6px 0;}
+.sr-card-count{font-family:var(--font-mono);font-size:11.5px;color:rgba(255,255,255,0.7);white-space:nowrap;}
+.sr-card-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px;}
+.sr-group{border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-shrink:0;}
+.sr-group-header{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--blue-100);}
+.sr-group-header .pb-toggle{color:var(--blue-800);}
+.sr-group-name{flex:1;font-weight:700;color:var(--blue-800);font-size:13px;}
+.sr-group-header .sr-card-count{color:var(--text-muted);}
+.sr-group-total{font-family:var(--font-mono);font-weight:700;color:var(--blue-800);white-space:nowrap;}
+.sr-group .data-table-wrap{border:none;border-radius:0;}
 td.sr-money{font-family:var(--font-mono);text-align:right;white-space:nowrap;}
 .pb-empty-note{color:var(--text-faint);font-size:12.5px;padding:4px 0;}
 .pb-grand-total-row{display:flex;justify-content:flex-end;align-items:center;gap:10px;font-family:var(--font-heading);font-weight:800;font-size:14px;padding:12px 16px;background:#F1F5F9;border:1px solid var(--border);border-radius:var(--radius);}
@@ -2177,7 +2187,7 @@ function sourceReportData(source){
   });
   sortedEvents().filter(eventInBudgetYear).forEach(function(ev){
     (ev.budgetItems || []).forEach(function(item){
-      if (sameSource(item.funds, source)) spending.push({ event: ev.title || "", eventDate: ev.date || "", general: item.general || "", company: item.company || "", cfoap: item.cfoap || "", orderDate: item.orderDate || "", amount: budgetItemTotals(item).totalCost });
+      if (sameSource(item.funds, source)) spending.push({ area: (boardById(ev.boardId) || {}).name || "Other", event: ev.title || "", eventDate: ev.date || "", general: item.general || "", company: item.company || "", cfoap: item.cfoap || "", orderDate: item.orderDate || "", amount: budgetItemTotals(item).totalCost });
     });
   });
   var funds = [];
@@ -2195,6 +2205,56 @@ function sourceReportData(source){
 
 // Remaining is only meaningful against a Proposed Budget for that year.
 function fmtRemaining(r){ return r === null ? "\u2014" : fmtMoney(r); }
+
+// Source Report sections and the groups inside them collapse like the
+// Proposed Budget categories. Open/closed state is per browser session.
+function srCollapsed(key){ return !!(ui.srCollapsed && ui.srCollapsed[key]); }
+function srToggleHTML(key){
+  var c = srCollapsed(key);
+  return '<button type="button" class="pb-toggle" data-action="toggle-sr" data-key="' + attr(key) + '" title="' + (c ? "Expand" : "Collapse") + '">' + (c ? "&#9656;" : "&#9662;") + '</button>';
+}
+function srCountLabel(n){ return n + (n === 1 ? " item" : " items"); }
+
+function srCardHTML(key, title, count, total, bodyHTML){
+  var k = "sec:" + key;
+  return '<div class="pb-category sr-card">' +
+    '<div class="pb-category-header">' + srToggleHTML(k) +
+      '<span class="sr-card-title">' + title + '</span>' +
+      '<span class="sr-card-count">' + srCountLabel(count) + '</span>' +
+      '<span class="pb-category-total">' + fmtMoney(total) + '</span>' +
+    '</div>' +
+    (srCollapsed(k) ? '' : '<div class="sr-card-body">' + bodyHTML + '</div>') +
+  '</div>';
+}
+
+// Groups rows (in first-seen order) under collapsible area headers, each
+// with its own table and subtotal. Every row must have an `amount`.
+function srGroupsHTML(key, rows, groupOf, headers, cellsOf){
+  var order = [], groups = {};
+  rows.forEach(function(r){
+    var g = groupOf(r);
+    if (!groups[g]){ groups[g] = []; order.push(g); }
+    groups[g].push(r);
+  });
+  return order.map(function(g){
+    var k = "grp:" + key + ":" + g, items = groups[g];
+    var subtotal = items.reduce(function(t, r){ return t + r.amount; }, 0);
+    var html = '<div class="sr-group">' +
+      '<div class="sr-group-header">' + srToggleHTML(k) +
+        '<span class="sr-group-name">' + esc(g) + '</span>' +
+        '<span class="sr-card-count">' + srCountLabel(items.length) + '</span>' +
+        '<span class="sr-group-total">' + fmtMoney(subtotal) + '</span>' +
+      '</div>';
+    if (!srCollapsed(k)){
+      html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+        headers.map(function(h){ return '<th>' + h + '</th>'; }).join("") + '<th style="text-align:right;">Amount</th>' +
+        '</tr></thead><tbody>' +
+        items.map(function(r){ return '<tr>' + cellsOf(r).map(function(c){ return '<td>' + c + '</td>'; }).join("") + '<td class="sr-money">' + fmtMoney(r.amount) + '</td></tr>'; }).join("") +
+        '</tbody></table></div>';
+    }
+    return html + '</div>';
+  }).join("");
+}
 
 function sourceReportHTML(){
   var sources = fundingSources();
@@ -2253,41 +2313,27 @@ function sourceReportHTML(){
     '<div class="sr-stat"><div class="sr-stat-label">Remaining (allocated &minus; spent)</div><div class="sr-stat-value' + (d.remaining < 0 ? ' over' : '') + '">' + fmtRemaining(d.remaining) + '</div></div>' +
   '</div>';
 
-  html += '<h3 class="sr-section-title">Funds &amp; Grants</h3>';
-  if (!d.funds.length){
-    html += '<div class="pb-empty-note">No funds on the Funding tab are linked to ' + esc(selected) + ' yet. Pick it in the Funding Source column there.</div>';
-  } else {
-    html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Status</th><th>Fund Name</th><th>Application Date</th><th>CFOAP</th><th>Start Date</th><th>End Date</th><th>Notes</th><th style="text-align:right;">Amount</th></tr></thead><tbody>';
-    d.funds.forEach(function(f){
-      html += '<tr><td>' + f.status + '</td><td>' + esc(f.name) + '</td><td>' + esc(f.applicationDate) + '</td><td>' + esc(f.cfoap) + '</td><td>' + esc(f.startDate) + '</td><td>' + esc(f.endDate) + '</td><td>' + esc(f.notes) + '</td><td class="sr-money">' + fmtMoney(f.amount) + '</td></tr>';
-    });
-    html += '</tbody></table></div>';
-  }
+  var fyNow = selectedBudgetYear();
 
-  html += '<h3 class="sr-section-title">Allocations</h3>';
-  if (!d.allocations.length){
-    var fyNow = selectedBudgetYear();
-    html += '<div class="pb-empty-note">' + (fyNow !== null && fyNow !== proposedBudgetYear()
-      ? 'The Proposed Budget is set to ' + fiscalYearLabel(proposedBudgetYear()) + ', so it has no allocations for ' + fiscalYearLabel(fyNow) + '.'
-      : 'No Proposed Budget subtopics use ' + esc(selected) + ' yet.') + '</div>';
-  } else {
-    html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Category</th><th>Subtopic</th><th style="text-align:right;">Amount</th></tr></thead><tbody>';
-    d.allocations.forEach(function(a){
-      html += '<tr><td>' + esc(a.category) + '</td><td>' + esc(a.subtopic) + '</td><td class="sr-money">' + fmtMoney(a.amount) + '</td></tr>';
-    });
-    html += '</tbody><tfoot><tr><td colspan="2">Total allocated</td><td class="sr-money">' + fmtMoney(d.allocated) + '</td></tr></tfoot></table></div>';
-  }
+  html += srCardHTML("funds", "Funds &amp; Grants", d.funds.length, d.awarded + d.pending, !d.funds.length
+    ? '<div class="pb-empty-note">No funds on the Funding tab are linked to ' + esc(selected) + (fyNow !== null ? ' in ' + fiscalYearLabel(fyNow) : '') + '. Pick it in the Funding Source column there.</div>'
+    : srGroupsHTML("funds", d.funds, function(f){ return f.status === "Current" ? "Current Funding" : "Potential Funding"; },
+        ["Fund Name", "Application Date", "CFOAP", "Start Date", "End Date", "Notes"],
+        function(f){ return [esc(f.name), esc(f.applicationDate), esc(f.cfoap), esc(f.startDate), esc(f.endDate), esc(f.notes)]; }));
 
-  html += '<h3 class="sr-section-title">Spending</h3>';
-  if (!d.spending.length){
-    html += '<div class="pb-empty-note">No event line items' + (selectedBudgetYear() !== null ? ' in ' + fiscalYearLabel(selectedBudgetYear()) : '') + ' have Funds set to ' + esc(selected) + '.</div>';
-  } else {
-    html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Event</th><th>General</th><th>Company</th><th>CFOAP</th><th>Order Date</th><th style="text-align:right;">Total Cost</th></tr></thead><tbody>';
-    d.spending.forEach(function(x){
-      html += '<tr><td>' + esc(x.event) + '</td><td>' + esc(x.general) + '</td><td>' + esc(x.company) + '</td><td>' + esc(x.cfoap) + '</td><td>' + esc(x.orderDate) + '</td><td class="sr-money">' + fmtMoney(x.amount) + '</td></tr>';
-    });
-    html += '</tbody><tfoot><tr><td colspan="5">Total spent</td><td class="sr-money">' + fmtMoney(d.spent) + '</td></tr></tfoot></table></div>';
-  }
+  html += srCardHTML("allocations", "Allocations", d.allocations.length, d.allocated, !d.allocations.length
+    ? '<div class="pb-empty-note">' + (fyNow !== null && fyNow !== proposedBudgetYear()
+        ? 'The Proposed Budget is set to ' + fiscalYearLabel(proposedBudgetYear()) + ', so it has no allocations for ' + fiscalYearLabel(fyNow) + '.'
+        : 'No Proposed Budget subtopics use ' + esc(selected) + ' yet.') + '</div>'
+    : srGroupsHTML("allocations", d.allocations, function(a){ return a.category || "Uncategorized"; },
+        ["Subtopic"],
+        function(a){ return [esc(a.subtopic)]; }));
+
+  html += srCardHTML("spending", "Spending", d.spending.length, d.spent, !d.spending.length
+    ? '<div class="pb-empty-note">No event line items' + (fyNow !== null ? ' in ' + fiscalYearLabel(fyNow) : '') + ' have Funds set to ' + esc(selected) + '.</div>'
+    : srGroupsHTML("spending", d.spending, function(x){ return x.area; },
+        ["Event", "General", "Company", "CFOAP", "Order Date"],
+        function(x){ return [esc(x.event), esc(x.general), esc(x.company), esc(x.cfoap), esc(x.orderDate)]; }));
   return html;
 }
 
@@ -3048,6 +3094,12 @@ var ACTIONS = {
       if (ui.sourceReportSource === name) ui.sourceReportSource = "";
       saveState(); render();
     }, { title: "Remove funding source?", confirmLabel: "Remove" });
+  },
+  "toggle-sr": function(t){
+    var key = t.getAttribute("data-key");
+    ui.srCollapsed = ui.srCollapsed || {};
+    ui.srCollapsed[key] = !ui.srCollapsed[key];
+    render();
   },
   "open-source-report": function(t){ ui.sourceReportSource = t.getAttribute("data-name"); render(); },
   "export-source-report": function(){ exportSourceReportCSV(); },
