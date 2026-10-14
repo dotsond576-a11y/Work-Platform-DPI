@@ -1995,15 +1995,16 @@ function fundingHTML(){
         '<button class="btn btn-primary btn-sm" data-action="add-fund" data-section="' + section + '">+ Add fund</button>' +
       '</div>' +
       '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
-        '<th>Fund Name</th><th>Application Date</th><th>CFOAP</th><th>Amount</th><th>Start Date</th><th>End Date</th><th>Notes</th><th></th>' +
+        '<th>Fund Name</th><th>Funding Source</th><th>Application Date</th><th>CFOAP</th><th>Amount</th><th>Start Date</th><th>End Date</th><th>Notes</th><th></th>' +
       '</tr></thead><tbody>';
     if (!funds.length){
-      html += '<tr><td colspan="8" style="color:var(--text-faint);font-size:12.5px;padding:12px;">No ' + pair[1].toLowerCase() + ' yet.</td></tr>';
+      html += '<tr><td colspan="9" style="color:var(--text-faint);font-size:12.5px;padding:12px;">No ' + pair[1].toLowerCase() + ' yet.</td></tr>';
     }
     funds.forEach(function(fund){
       var a = '" data-section="' + section + '" data-fund="' + fund.id + '"';
       html += '<tr>' +
-        '<td><input type="text" placeholder="Fund name" value="' + attr(fund.name||"") + '" data-fund-field="name' + a + '></td>' +
+        '<td><input type="text" placeholder="Fund name" value="' + attr(fund.name||"") + '" data-fund-field="name' + a + ' style="min-width:200px;"></td>' +
+        '<td>' + fundingSourceSelectHTML(fund.source, 'data-fund-field="source' + a, "—") + '</td>' +
         '<td><input type="date" value="' + attr(fund.applicationDate||"") + '" data-fund-field="applicationDate' + a + '></td>' +
         '<td><input type="text" value="' + attr(fund.cfoap||"") + '" data-fund-field="cfoap' + a + '></td>' +
         '<td><input type="number" step="0.01" value="' + (fund.amount||0) + '" data-fund-field="amount' + a + '></td>' +
@@ -2017,7 +2018,7 @@ function fundingHTML(){
       '</tr>';
     });
     html += '</tbody><tfoot>' +
-      '<tr><td colspan="3">Total</td><td id="funding-total-' + section + '">' + fmtMoney(fundingTotal(section)) + '</td><td colspan="4"></td></tr>' +
+      '<tr><td colspan="4">Total</td><td id="funding-total-' + section + '">' + fmtMoney(fundingTotal(section)) + '</td><td colspan="4"></td></tr>' +
       '</tfoot></table></div></div>';
   });
   return html;
@@ -2050,6 +2051,24 @@ function fundingSourceSelectHTML(value, attrs, placeholder){
   '</select>';
 }
 
+// The record (and field on it) that a funding source <select> edits.
+function sourceSelectTarget(sel){
+  var obj = null, key = null;
+  if (sel.hasAttribute("data-proposed-field")){
+    var cat = ((state.proposedBudget && state.proposedBudget.categories) || []).find(function(c){ return c.id === sel.getAttribute("data-category"); });
+    obj = cat ? (cat.subtopics || []).find(function(x){ return x.id === sel.getAttribute("data-subtopic"); }) : null;
+    key = "fundingSource";
+  } else if (sel.hasAttribute("data-budget-field")){
+    var ev = eventById(sel.getAttribute("data-event"));
+    obj = ev ? (ev.budgetItems || []).find(function(i){ return i.id === sel.getAttribute("data-item"); }) : null;
+    key = "funds";
+  } else if (sel.hasAttribute("data-fund-field")){
+    obj = fundingList(sel.getAttribute("data-section")).find(function(f){ return f.id === sel.getAttribute("data-fund"); });
+    key = "source";
+  }
+  return obj ? { obj: obj, key: key } : null;
+}
+
 function addFundingSourceModal(onAdded){
   openModal('<form data-submit-action="submit-add-funding-source">' +
     '<div class="modal-header"><h3>Add funding source</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
@@ -2079,9 +2098,17 @@ function sourceReportData(source){
       if (sameSource(item.funds, source)) spending.push({ event: ev.title || "", eventDate: ev.date || "", general: item.general || "", company: item.company || "", cfoap: item.cfoap || "", orderDate: item.orderDate || "", amount: budgetItemTotals(item).totalCost });
     });
   });
+  var funds = [];
+  FUNDING_SECTIONS.forEach(function(pair){
+    fundingList(pair[0]).forEach(function(f){
+      if (sameSource(f.source, source)) funds.push({ status: pair[0] === "current" ? "Current" : "Potential", name: f.name || "", applicationDate: f.applicationDate || "", cfoap: f.cfoap || "", amount: Number(f.amount) || 0, startDate: f.startDate || "", endDate: f.endDate || "", notes: f.notes || "" });
+    });
+  });
+  var awarded = funds.reduce(function(t, f){ return t + (f.status === "Current" ? f.amount : 0); }, 0);
+  var pending = funds.reduce(function(t, f){ return t + (f.status === "Potential" ? f.amount : 0); }, 0);
   var allocated = allocations.reduce(function(t, a){ return t + a.amount; }, 0);
   var spent = spending.reduce(function(t, x){ return t + x.amount; }, 0);
-  return { allocations: allocations, spending: spending, allocated: allocated, spent: spent, remaining: allocated - spent };
+  return { funds: funds, allocations: allocations, spending: spending, awarded: awarded, pending: pending, allocated: allocated, spent: spent, remaining: allocated - spent };
 }
 
 function sourceReportHTML(){
@@ -2106,21 +2133,25 @@ function sourceReportHTML(){
 
   if (!selected){
     if (!sources.length) return html + emptyState("No funding sources yet.", "Add a source, then pick it on Proposed Budget subtopics and event line items.");
-    var sumAllocated = 0, sumSpent = 0;
+    var sumAwarded = 0, sumPending = 0, sumAllocated = 0, sumSpent = 0;
     html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
-      '<th>Funding Source</th><th style="text-align:right;">Allocated (Proposed)</th><th style="text-align:right;">Spent (Events)</th><th style="text-align:right;">Remaining</th>' +
+      '<th>Funding Source</th><th style="text-align:right;">Awarded (Current)</th><th style="text-align:right;">Pending (Potential)</th><th style="text-align:right;">Allocated (Proposed)</th><th style="text-align:right;">Spent (Events)</th><th style="text-align:right;">Remaining</th>' +
     '</tr></thead><tbody>';
     sources.forEach(function(n){
       var d = sourceReportData(n);
-      sumAllocated += d.allocated; sumSpent += d.spent;
+      sumAwarded += d.awarded; sumPending += d.pending; sumAllocated += d.allocated; sumSpent += d.spent;
       html += '<tr>' +
         '<td><a href="#" data-action="open-source-report" data-name="' + attr(n) + '" style="font-weight:600;color:var(--blue-800);text-decoration:none;">' + esc(n) + '</a></td>' +
+        '<td class="sr-money">' + fmtMoney(d.awarded) + '</td>' +
+        '<td class="sr-money">' + fmtMoney(d.pending) + '</td>' +
         '<td class="sr-money">' + fmtMoney(d.allocated) + '</td>' +
         '<td class="sr-money">' + fmtMoney(d.spent) + '</td>' +
         '<td class="sr-money"' + (d.remaining < 0 ? ' style="color:#DC2626;"' : '') + '>' + fmtMoney(d.remaining) + '</td>' +
       '</tr>';
     });
     html += '</tbody><tfoot><tr><td>Total</td>' +
+      '<td class="sr-money">' + fmtMoney(sumAwarded) + '</td>' +
+      '<td class="sr-money">' + fmtMoney(sumPending) + '</td>' +
       '<td class="sr-money">' + fmtMoney(sumAllocated) + '</td>' +
       '<td class="sr-money">' + fmtMoney(sumSpent) + '</td>' +
       '<td class="sr-money">' + fmtMoney(sumAllocated - sumSpent) + '</td>' +
@@ -2130,10 +2161,23 @@ function sourceReportHTML(){
 
   var d = sourceReportData(selected);
   html += '<div class="sr-stats">' +
+    '<div class="sr-stat"><div class="sr-stat-label">Awarded (Current Funding)</div><div class="sr-stat-value">' + fmtMoney(d.awarded) + '</div></div>' +
+    '<div class="sr-stat"><div class="sr-stat-label">Pending (Potential Funding)</div><div class="sr-stat-value">' + fmtMoney(d.pending) + '</div></div>' +
     '<div class="sr-stat"><div class="sr-stat-label">Allocated (Proposed Budget)</div><div class="sr-stat-value">' + fmtMoney(d.allocated) + '</div></div>' +
     '<div class="sr-stat"><div class="sr-stat-label">Spent (event line items)</div><div class="sr-stat-value">' + fmtMoney(d.spent) + '</div></div>' +
-    '<div class="sr-stat"><div class="sr-stat-label">Remaining</div><div class="sr-stat-value' + (d.remaining < 0 ? ' over' : '') + '">' + fmtMoney(d.remaining) + '</div></div>' +
+    '<div class="sr-stat"><div class="sr-stat-label">Remaining (allocated &minus; spent)</div><div class="sr-stat-value' + (d.remaining < 0 ? ' over' : '') + '">' + fmtMoney(d.remaining) + '</div></div>' +
   '</div>';
+
+  html += '<h3 class="sr-section-title">Funds &amp; Grants</h3>';
+  if (!d.funds.length){
+    html += '<div class="pb-empty-note">No funds on the Funding tab are linked to ' + esc(selected) + ' yet. Pick it in the Funding Source column there.</div>';
+  } else {
+    html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Status</th><th>Fund Name</th><th>Application Date</th><th>CFOAP</th><th>Start Date</th><th>End Date</th><th>Notes</th><th style="text-align:right;">Amount</th></tr></thead><tbody>';
+    d.funds.forEach(function(f){
+      html += '<tr><td>' + f.status + '</td><td>' + esc(f.name) + '</td><td>' + esc(f.applicationDate) + '</td><td>' + esc(f.cfoap) + '</td><td>' + esc(f.startDate) + '</td><td>' + esc(f.endDate) + '</td><td>' + esc(f.notes) + '</td><td class="sr-money">' + fmtMoney(f.amount) + '</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
 
   html += '<h3 class="sr-section-title">Allocations</h3>';
   if (!d.allocations.length){
@@ -2163,16 +2207,18 @@ function exportSourceReportCSV(){
   var selected = ui.sourceReportSource || "";
   var rows, filename;
   if (!selected){
-    rows = [["Funding Source", "Allocated (Proposed)", "Spent (Events)", "Remaining"]];
+    rows = [["Funding Source", "Awarded (Current)", "Pending (Potential)", "Allocated (Proposed)", "Spent (Events)", "Remaining"]];
     fundingSources().forEach(function(n){
       var d = sourceReportData(n);
-      rows.push([n, d.allocated.toFixed(2), d.spent.toFixed(2), d.remaining.toFixed(2)]);
+      rows.push([n, d.awarded.toFixed(2), d.pending.toFixed(2), d.allocated.toFixed(2), d.spent.toFixed(2), d.remaining.toFixed(2)]);
     });
     filename = "funding-sources-summary.csv";
   } else {
     var d = sourceReportData(selected);
-    rows = [["Funding source", selected], ["Allocated", d.allocated.toFixed(2)], ["Spent", d.spent.toFixed(2)], ["Remaining", d.remaining.toFixed(2)], [],
-      ["ALLOCATIONS"], ["Category", "Subtopic", "Amount"]];
+    rows = [["Funding source", selected], ["Awarded", d.awarded.toFixed(2)], ["Pending", d.pending.toFixed(2)], ["Allocated", d.allocated.toFixed(2)], ["Spent", d.spent.toFixed(2)], ["Remaining", d.remaining.toFixed(2)], [],
+      ["FUNDS & GRANTS"], ["Status", "Fund Name", "Application Date", "CFOAP", "Start Date", "End Date", "Notes", "Amount"]];
+    d.funds.forEach(function(f){ rows.push([f.status, f.name, f.applicationDate, f.cfoap, f.startDate, f.endDate, f.notes, f.amount.toFixed(2)]); });
+    rows.push([], ["ALLOCATIONS"], ["Category", "Subtopic", "Amount"]);
     d.allocations.forEach(function(a){ rows.push([a.category, a.subtopic, a.amount.toFixed(2)]); });
     rows.push([], ["SPENDING"], ["Event", "Event Date", "General", "Company", "CFOAP", "Order Date", "Total Cost"]);
     d.spending.forEach(function(x){ rows.push([x.event, x.eventDate, x.general, x.company, x.cfoap, x.orderDate, x.amount.toFixed(2)]); });
@@ -2887,7 +2933,7 @@ var ACTIONS = {
     }, 30);
   },
   "add-fund": function(t){
-    var fund = { id: uid(), name: "", applicationDate: "", cfoap: "", amount: 0, startDate: "", endDate: "", notes: "" };
+    var fund = { id: uid(), name: "", source: "", applicationDate: "", cfoap: "", amount: 0, startDate: "", endDate: "", notes: "" };
     fundingList(t.getAttribute("data-section")).push(fund);
     saveState(); render();
     setTimeout(function(){
@@ -2987,17 +3033,10 @@ document.addEventListener("input", function(e){
     if (t.value === NEW_SOURCE_OPTION){
       // Put the select back to its saved value, then ask for the new name and
       // apply it to this row once added.
-      var row = t;
-      var field = row.getAttribute("data-proposed-field") ? "proposed" : "budget";
-      var target = field === "proposed"
-        ? ((state.proposedBudget.categories||[]).find(function(c){ return c.id === row.getAttribute("data-category"); }) || {subtopics:[]}).subtopics.find(function(s){ return s.id === row.getAttribute("data-subtopic"); })
-        : ((eventById(row.getAttribute("data-event")) || {}).budgetItems || []).find(function(i){ return i.id === row.getAttribute("data-item"); });
-      row.value = target ? (field === "proposed" ? (target.fundingSource || "") : (target.funds || "")) : "";
+      var target = sourceSelectTarget(t);
+      t.value = target ? (target.obj[target.key] || "") : "";
       addFundingSourceModal(function(name){
-        if (target){
-          if (field === "proposed") target.fundingSource = name; else target.funds = name;
-          saveState();
-        }
+        if (target){ target.obj[target.key] = name; saveState(); }
         render();
       });
       return;
