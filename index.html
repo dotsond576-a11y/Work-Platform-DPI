@@ -1622,9 +1622,9 @@ function mailingListViewHTML(){
 /* ============================================================
    Budget view
    ============================================================ */
-/* School / fiscal years run July 1 - June 30 and are identified by the
-   calendar year they start in: 2026 = "2026-27" = Jul 1 2026 - Jun 30 2027. */
-var FISCAL_YEAR_START_MONTH = 7;
+/* School years run September 1 - August 31 and are identified by the
+   calendar year they start in: 2026 = "2026-27" = Sep 1 2026 - Aug 31 2027. */
+var FISCAL_YEAR_START_MONTH = 9;
 function fiscalYearOf(dateStr){
   if (!dateStr || !/^\d{4}-\d{2}/.test(dateStr)) return null;
   var y = parseInt(dateStr.slice(0, 4), 10), m = parseInt(dateStr.slice(5, 7), 10);
@@ -1632,7 +1632,7 @@ function fiscalYearOf(dateStr){
 }
 function currentFiscalYear(){ return fiscalYearOf(todayISO()); }
 function fiscalYearLabel(fy){ return fy + "\u2013" + String((fy + 1) % 100).padStart(2, "0"); }
-function fiscalYearRangeLabel(fy){ return "Jul 1, " + fy + " \u2013 Jun 30, " + (fy + 1); }
+function fiscalYearRangeLabel(fy){ return "Sep 1, " + fy + " \u2013 Aug 31, " + (fy + 1); }
 // The year picked in the Budget page's year filter: a number, or null for all years.
 function selectedBudgetYear(){
   if (ui.budgetYear === undefined) ui.budgetYear = String(currentFiscalYear());
@@ -1642,19 +1642,15 @@ function eventInBudgetYear(ev){
   var fy = selectedBudgetYear();
   return fy === null || fiscalYearOf(ev.date) === fy;
 }
-// A fund counts toward a year if its start-end dates overlap it. Without
-// those, its application date decides; with no dates at all it shows in
-// every year so it never disappears.
+// A fund belongs to the one school year its start date falls in (so a
+// grant spanning two years is never counted twice). Without a start date,
+// its application date, then end date, decides; with no dates at all it
+// shows in every year so it never disappears.
 function fundInBudgetYear(f){
   var fy = selectedBudgetYear();
   if (fy === null) return true;
-  var start = f.startDate || "", end = f.endDate || "";
-  if (start || end){
-    var yStart = fy + "-07-01", yEnd = (fy + 1) + "-06-30";
-    return (!start || start <= yEnd) && (!end || end >= yStart);
-  }
-  if (f.applicationDate) return fiscalYearOf(f.applicationDate) === fy;
-  return true;
+  var date = f.startDate || f.applicationDate || f.endDate || "";
+  return date ? fiscalYearOf(date) === fy : true;
 }
 function proposedBudgetYear(){
   var fy = state.proposedBudget && state.proposedBudget.fiscalYear;
