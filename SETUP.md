@@ -14,7 +14,7 @@ and publishing the Firestore rules below.
 
 ```
 jriel2@uic.edu
-markh3@illinois.edu
+markh3@uillinois.edu
 tmcfar1@uillinois.edu
 jdanish@illinois.edu
 ddotson2@uillinois.edu
@@ -53,7 +53,7 @@ service cloud.firestore {
       allow read, write: if request.auth != null &&
         request.auth.token.email in [
           "jriel2@uic.edu",
-          "markh3@illinois.edu",
+          "markh3@uillinois.edu",
           "tmcfar1@uillinois.edu",
           "jdanish@illinois.edu",
           "ddotson2@uillinois.edu"
