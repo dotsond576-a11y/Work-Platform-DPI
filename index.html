@@ -387,6 +387,19 @@ span.li-group-name{background:none;color:rgba(255,255,255,0.85);font-weight:800;
 .att-group-label{flex:1;font-weight:700;font-size:12.5px;font-family:var(--font-heading);color:var(--text);}
 .att-group-count{font-weight:400;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);}
 .att-session-item{margin-left:16px;}
+.att-summary-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin-bottom:12px;font-size:12.5px;color:var(--text-muted);}
+.att-summary-line strong{color:var(--text);font-family:var(--font-mono);}
+.att-filter{display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden;}
+.att-filter button{border:none;background:#fff;padding:4px 11px;font-size:12px;color:var(--text-muted);cursor:pointer;}
+.att-filter button + button{border-left:1px solid var(--border);}
+.att-filter button.active{background:var(--blue-800);color:#fff;}
+table.data-table td.att-check-cell{text-align:center;}
+table.data-table input.att-check{width:18px;height:18px;min-width:0;padding:0;cursor:pointer;accent-color:var(--blue-800);}
+tr.att-no-show td{background:#FAFAFA;}
+tr.att-no-show input[type=text]{color:var(--text-muted);}
+.att-status{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:600;white-space:nowrap;}
+.att-status.yes{background:#DCFCE7;color:#166534;}
+.att-status.no{background:#F1F5F9;color:#64748B;}
 
 .tabs{display:flex;gap:4px;background:#EEF1F7;padding:4px;border-radius:10px;width:fit-content;margin-bottom:16px;}
 .tabs button{border:none;background:transparent;padding:8px 16px;border-radius:8px;font-weight:600;font-size:13px;color:var(--text-muted);}
@@ -664,6 +677,18 @@ function autoCategorizeLineItemsIfNeeded(s){
   return s;
 }
 
+// Each event's attendeeIds is everyone who signed up; attendedIds is the
+// subset who actually showed up. Rosters entered before sign-ups and
+// attendance were split were records of who attended, so carry them over.
+function migrateAttendedIfNeeded(s){
+  if (s.attendedMigrated) return s;
+  s.events.forEach(function(e){
+    if (e.attendedIds === undefined) e.attendedIds = (e.attendeeIds || []).slice();
+  });
+  s.attendedMigrated = true;
+  return s;
+}
+
 var DEFAULT_FUNDING_SOURCES = ["Apple", "CME Group", "Fry Foundation", "Google"];
 
 function defaultState(){
@@ -689,6 +714,7 @@ function defaultState(){
     lineItemCategoriesSeeded: false,
     lineItemAutoCategorizedSeeded: false,
     transportationCategorySeeded: false,
+    attendedMigrated: true,
     funding: { current: [], potential: [] },
     fundingSources: DEFAULT_FUNDING_SOURCES.slice()
   };
@@ -764,6 +790,10 @@ function buildState(loaded){
     s.lineItemAutoCategorizedSeeded = false;
   }
   autoCategorizeLineItemsIfNeeded(s);
+  if (loaded && loaded.attendedMigrated === undefined){
+    s.attendedMigrated = false;
+  }
+  migrateAttendedIfNeeded(s);
   return s;
 }
 
@@ -1311,6 +1341,28 @@ function emptyState(title, sub){
    ============================================================ */
 function attendanceBoardIds(){ return state.attendanceBoardIds || []; }
 
+function signedUpIds(e){ return e.attendeeIds || []; }
+function attendedIds(e){
+  // Only count people still on the sign-up list.
+  var signed = signedUpIds(e);
+  return (e.attendedIds || []).filter(function(id){ return signed.indexOf(id) !== -1; });
+}
+function didAttend(e, participantId){ return attendedIds(e).indexOf(participantId) !== -1; }
+function attendanceCountLabel(e){ return attendedIds(e).length + "/" + signedUpIds(e).length; }
+function percentLabel(part, whole){ return whole ? Math.round(part / whole * 100) + "%" : "&ndash;"; }
+
+function attendanceTotals(sessions){
+  var signedUp = 0, attended = 0, people = {}, attendedPeople = {};
+  sessions.forEach(function(e){
+    var att = attendedIds(e);
+    signedUp += signedUpIds(e).length;
+    attended += att.length;
+    signedUpIds(e).forEach(function(id){ people[id] = true; });
+    att.forEach(function(id){ attendedPeople[id] = true; });
+  });
+  return { sessions: sessions.length, signedUp: signedUp, attended: attended, people: Object.keys(people).length, attendedPeople: Object.keys(attendedPeople).length };
+}
+
 function attendanceSessionGroups(){
   var ids = attendanceBoardIds();
   var groups = [];
@@ -1354,6 +1406,7 @@ function attendanceViewHTML(){
   html += attendanceAreasBarHTML();
   html += '<div class="two-col">';
   html += '<div class="side-list">';
+  html += '<div class="side-list-item ' + (ui.attendanceSession==="summary"?"active":"") + '" data-action="attendance-select" data-id="summary">Summary</div>';
   html += '<div class="side-list-item ' + (ui.attendanceSession==="directory"?"active":"") + '" data-action="attendance-select" data-id="directory">All Participants <span class="sub">' + state.participants.length + '</span></div>';
   groups.forEach(function(g){
     if (ui.attendanceGroupCollapsed[g.key] === undefined) ui.attendanceGroupCollapsed[g.key] = true;
@@ -1367,7 +1420,7 @@ function attendanceViewHTML(){
     if (!collapsed){
       g.sessions.forEach(function(e){
         html += '<div class="side-list-item att-session-item ' + (ui.attendanceSession===e.id?"active":"") + '" data-action="attendance-select" data-id="' + e.id + '">' +
-                  esc(e.title) + '<span class="sub">' + (e.attendeeIds||[]).length + '</span>' +
+                  esc(e.title) + '<span class="sub" title="Attended / signed up">' + attendanceCountLabel(e) + '</span>' +
                 '</div>';
       });
     }
@@ -1377,6 +1430,8 @@ function attendanceViewHTML(){
   html += '<div class="content-col">';
   if (ui.attendanceSession === "directory"){
     html += directoryTableHTML();
+  } else if (ui.attendanceSession === "summary"){
+    html += attendanceSummaryHTML(groups);
   } else {
     var session = eventById(ui.attendanceSession);
     if (!session || attendanceBoardIds().indexOf(session.boardId) === -1){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
@@ -1408,6 +1463,39 @@ function attendanceAreasBarHTML(){
   '</div>';
 }
 
+function attendanceSummaryHTML(groups){
+  if (!groups.length){
+    return emptyState("No sessions to summarize.", "Add an event board above to start tracking attendance.");
+  }
+  var html = '<h3 style="margin:0 0 12px;font-family:var(--font-heading);">Sign-ups vs. attendance</h3>';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>Area</th><th>Sessions</th><th>Sign-ups</th><th>Attended</th><th>Attendance rate</th><th>People signed up</th><th>People attended</th>' +
+    '</tr></thead><tbody>';
+  var all = [];
+  groups.forEach(function(g){
+    var t = attendanceTotals(g.sessions);
+    all = all.concat(g.sessions);
+    html += '<tr><td>' + esc(g.label) + '</td><td>' + t.sessions + '</td><td>' + t.signedUp + '</td><td>' + t.attended + '</td><td>' + percentLabel(t.attended, t.signedUp) + '</td><td>' + t.people + '</td><td>' + t.attendedPeople + '</td></tr>';
+  });
+  var total = attendanceTotals(all);
+  html += '</tbody><tfoot><tr><td>Total</td><td>' + total.sessions + '</td><td>' + total.signedUp + '</td><td>' + total.attended + '</td><td>' + percentLabel(total.attended, total.signedUp) + '</td><td>' + total.people + '</td><td>' + total.attendedPeople + '</td></tr></tfoot>';
+  html += '</table></div>';
+  html += '<div class="empty-note" style="margin-top:8px;">Sign-ups and Attended count each person once per session. "People" columns count each person once per area, however many sessions they joined.</div>';
+
+  html += '<h3 style="margin:22px 0 12px;font-family:var(--font-heading);">By session</h3>';
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+    '<th>Session</th><th>Date</th><th>Area</th><th>Signed up</th><th>Attended</th><th>Didn\'t attend</th><th>Attendance rate</th>' +
+    '</tr></thead><tbody>';
+  groups.forEach(function(g){
+    g.sessions.forEach(function(e){
+      var s = signedUpIds(e).length, a = attendedIds(e).length;
+      html += '<tr style="cursor:pointer;" data-action="attendance-select" data-id="' + e.id + '"><td>' + esc(e.title) + '</td><td>' + eventDateRangeLabel(e) + '</td><td>' + esc(g.label) + '</td><td>' + s + '</td><td>' + a + '</td><td>' + (s - a) + '</td><td>' + percentLabel(a, s) + '</td></tr>';
+    });
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
 function tableHeaderCells(){
   var cells = '<th>First Name</th><th>Last Name</th><th>School</th><th>Email</th><th>IEIN</th>';
   state.customFields.forEach(function(f){
@@ -1424,13 +1512,15 @@ function directoryTableHTML(){
     '<input type="text" id="participant-search" placeholder="Look up a participant by name, school, or email&hellip;" value="' + attr(ui.participantSearch||"") + '">' +
   '</div>';
   html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
-    tableHeaderCells() + '<th>Sessions</th><th></th>' +
+    tableHeaderCells() + '<th title="Sessions signed up for">Signed up</th><th title="Sessions actually attended">Attended</th><th></th>' +
     '</tr></thead><tbody>';
   sortedParticipants(state.participants).forEach(function(p){
-    var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
+    var signedCount = state.events.filter(function(e){ return signedUpIds(e).indexOf(p.id) !== -1; }).length;
+    var attendedCount = state.events.filter(function(e){ return didAttend(e, p.id); }).length;
     var searchKey = (fullName(p) + " " + (p.school||"") + " " + (p.email||"")).toLowerCase();
     html += '<tr data-search="' + attr(searchKey) + '">' + participantCells(p) +
-      '<td style="text-align:center;"><button class="row-action" style="color:var(--blue-800);font-weight:700;font-family:var(--font-mono);" data-action="view-participant" data-id="' + p.id + '" title="View events attended">' + sessionCount + '</button></td>' +
+      '<td style="text-align:center;"><button class="row-action" style="color:var(--blue-800);font-weight:700;font-family:var(--font-mono);" data-action="view-participant" data-id="' + p.id + '" title="View sessions">' + signedCount + '</button></td>' +
+      '<td style="text-align:center;"><button class="row-action" style="color:var(--blue-800);font-weight:700;font-family:var(--font-mono);" data-action="view-participant" data-id="' + p.id + '" title="View sessions">' + attendedCount + '</button></td>' +
       '<td><button class="row-action" data-action="delete-participant" data-id="' + p.id + '" title="Delete participant">&times;</button></td>' +
       '</tr>';
   });
@@ -1458,7 +1548,8 @@ function participantDetailModalHTML(participantId){
     return '<div class="modal-header"><h3>Participant not found</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>' +
       '<div class="modal-body"><div class="empty-note">This participant may have been deleted.</div></div>';
   }
-  var attended = sortedEvents().filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; });
+  var signedUp = sortedEvents().filter(function(e){ return signedUpIds(e).indexOf(p.id) !== -1; });
+  var attendedCount = signedUp.filter(function(e){ return didAttend(e, p.id); }).length;
   var html = '<div class="modal-header"><h3>' + esc(fullName(p)) + '</h3><button type="button" class="modal-close" data-action="close-modal">&times;</button></div>';
   html += '<div class="modal-body">';
   html += '<div style="display:flex;flex-wrap:wrap;gap:8px 22px;margin-bottom:18px;font-size:13px;">';
@@ -1470,15 +1561,17 @@ function participantDetailModalHTML(participantId){
     if (val) html += '<div><span style="color:var(--text-muted);">' + esc(f) + '</span><br>' + esc(val) + '</div>';
   });
   html += '</div>';
-  html += '<div class="section-label">Events attended (' + attended.length + ')</div>';
-  if (!attended.length){
-    html += '<div class="empty-note">Not enrolled in any sessions yet.</div>';
+  html += '<div class="section-label">Sessions: signed up for ' + signedUp.length + ', attended ' + attendedCount + '</div>';
+  if (!signedUp.length){
+    html += '<div class="empty-note">Not signed up for any sessions yet.</div>';
   } else {
     html += '<div style="max-height:340px;overflow-y:auto;">';
-    attended.forEach(function(e){
+    signedUp.forEach(function(e){
+      var went = didAttend(e, p.id);
       html += '<div class="list-row" style="margin-bottom:6px;cursor:pointer;" data-action="goto-session" data-id="' + e.id + '">' +
                 '<div class="list-date">' + eventDateShortLabel(e) + '</div>' +
                 '<div class="list-title">' + esc(e.title) + '</div>' +
+                '<span class="att-status ' + (went ? "yes" : "no") + '">' + (went ? "Attended" : "Didn&rsquo;t attend") + '</span>' +
                 '<div class="list-board"><span class="color-dot" style="background:' + boardColor(e.boardId) + '"></span>' + esc(boardName(e.boardId)) + '</div>' +
               '</div>';
     });
@@ -1504,7 +1597,9 @@ function participantCells(p){
 }
 
 function sessionRosterHTML(session){
-  var attendees = sortedParticipants((session.attendeeIds || []).map(participantById).filter(Boolean));
+  var attendees = sortedParticipants(signedUpIds(session).map(participantById).filter(Boolean));
+  var attendedCount = attendees.filter(function(p){ return didAttend(session, p.id); }).length;
+  var filter = ui.rosterFilter || "all";
   var html = '<div class="toolbar" style="margin-bottom:14px;">' +
     '<h3 style="margin:0;font-family:var(--font-heading);">' + esc(session.title) + ' <span style="font-weight:400;color:var(--text-muted);font-size:13px;">' + eventDateRangeLabel(session) + '</span></h3>' +
     '<div class="grow"></div>' +
@@ -1513,18 +1608,48 @@ function sessionRosterHTML(session){
     '<button class="btn btn-sm btn-primary" data-action="add-new-attendee" data-id="' + session.id + '">+ Add attendee</button>' +
   '</div>';
   if (!attendees.length){
-    html += emptyState("No attendees enrolled.", "Add a new attendee or bring in someone from the directory.");
+    html += emptyState("No one signed up yet.", "Import the sign-up list, add a new person, or bring in someone from the directory. Then check off who attended.");
     return html;
   }
-  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr>' + tableHeaderCells() + '<th></th><th></th></tr></thead><tbody>';
-  attendees.forEach(function(p){
-    html += '<tr>' + participantCells(p) +
+  html += '<div class="att-summary-line">' +
+    '<span>Signed up <strong>' + attendees.length + '</strong></span>' +
+    '<span>Attended <strong>' + attendedCount + '</strong></span>' +
+    '<span>Didn&rsquo;t attend <strong>' + (attendees.length - attendedCount) + '</strong></span>' +
+    '<span>Rate <strong>' + percentLabel(attendedCount, attendees.length) + '</strong></span>' +
+    '<span class="att-filter">' +
+      [["all","Everyone"],["attended","Attended"],["absent","Didn\u2019t attend"]].map(function(f){
+        return '<button type="button" class="' + (filter===f[0]?"active":"") + '" data-action="roster-filter" data-filter="' + f[0] + '">' + f[1] + '</button>';
+      }).join("") +
+    '</span>' +
+    '<button class="btn btn-sm" data-action="mark-all-attended" data-id="' + session.id + '">Mark all attended</button>' +
+    '<button class="btn btn-sm" data-action="clear-attended" data-id="' + session.id + '">Clear attended</button>' +
+  '</div>';
+  var shown = attendees.filter(function(p){
+    if (filter === "attended") return didAttend(session, p.id);
+    if (filter === "absent") return !didAttend(session, p.id);
+    return true;
+  });
+  html += '<div class="data-table-wrap"><table class="data-table"><thead><tr><th title="Check everyone who actually attended">Attended</th>' + tableHeaderCells() + '<th></th><th></th></tr></thead><tbody>';
+  if (!shown.length){
+    html += '<tr><td colspan="' + (8 + state.customFields.length) + '"><div class="empty-note">No one in this list.</div></td></tr>';
+  }
+  shown.forEach(function(p){
+    var went = didAttend(session, p.id);
+    html += '<tr class="' + (went ? "" : "att-no-show") + '">' +
+      '<td class="att-check-cell"><input type="checkbox" class="att-check" data-attended-event="' + session.id + '" data-participant="' + p.id + '"' + (went ? " checked" : "") + ' title="Attended"></td>' +
+      participantCells(p) +
       '<td><button class="row-action" style="color:var(--blue-800);" data-action="view-participant" data-id="' + p.id + '" title="View all events attended">&#128065;</button></td>' +
-      '<td><button class="row-action" data-action="remove-attendance" data-event="' + session.id + '" data-participant="' + p.id + '" title="Remove from session">&times;</button></td>' +
+      '<td><button class="row-action" data-action="remove-attendance" data-event="' + session.id + '" data-participant="' + p.id + '" title="Remove from sign-up list">&times;</button></td>' +
       '</tr>';
   });
   html += '</tbody></table></div>';
   return html;
+}
+
+function setAttended(ev, participantId, attended){
+  var list = attendedIds(ev).filter(function(id){ return id !== participantId; });
+  if (attended) list.push(participantId);
+  ev.attendedIds = list;
 }
 
 /* ============================================================
@@ -2790,7 +2915,7 @@ var ACTIONS = {
       var e = eventById(id);
       e.title = title; e.date = date; e.endDate = endDate; e.boardId = boardId; e.subcategoryId = subcategoryId; e.notes = notes;
     } else {
-      state.events.push({ id: uid(), title: title, date: date, endDate: endDate, boardId: boardId, subcategoryId: subcategoryId, notes: notes, attendeeIds: [], budgetItems: [] });
+      state.events.push({ id: uid(), title: title, date: date, endDate: endDate, boardId: boardId, subcategoryId: subcategoryId, notes: notes, attendeeIds: [], attendedIds: [], budgetItems: [] });
     }
     if (state.currentView === "budget" && boardId){
       state.budgetBoardIds = state.budgetBoardIds || [];
@@ -2814,7 +2939,7 @@ var ACTIONS = {
   "close-modal": function(){ closeModal(); },
   "close-modal-overlay": function(t, ev){ if (ev.target === t) closeModal(); },
 
-  "attendance-select": function(t){ ui.attendanceSession = t.getAttribute("data-id"); render(); },
+  "attendance-select": function(t){ ui.attendanceSession = t.getAttribute("data-id"); ui.rosterFilter = "all"; render(); },
   "attendance-toggle-group": function(t){
     var key = t.getAttribute("data-key");
     ui.attendanceGroupCollapsed[key] = !ui.attendanceGroupCollapsed[key];
@@ -2849,8 +2974,26 @@ var ACTIONS = {
     var eventId = t.getAttribute("data-event");
     var participantId = t.getAttribute("data-participant");
     var ev = eventById(eventId);
-    if (ev) ev.attendeeIds = (ev.attendeeIds||[]).filter(function(id){ return id !== participantId; });
+    if (ev){
+      ev.attendeeIds = (ev.attendeeIds||[]).filter(function(id){ return id !== participantId; });
+      ev.attendedIds = (ev.attendedIds||[]).filter(function(id){ return id !== participantId; });
+    }
     saveState(); render();
+  },
+  "roster-filter": function(t){ ui.rosterFilter = t.getAttribute("data-filter"); render(); },
+  "mark-all-attended": function(t){
+    var ev = eventById(t.getAttribute("data-id"));
+    if (!ev) return;
+    ev.attendedIds = signedUpIds(ev).slice();
+    saveState(); render();
+  },
+  "clear-attended": function(t){
+    var ev = eventById(t.getAttribute("data-id"));
+    if (!ev || !attendedIds(ev).length) return;
+    confirmModal("Uncheck everyone as attended for \"" + ev.title + "\"? The sign-up list stays as it is.", function(){
+      ev.attendedIds = [];
+      saveState(); render();
+    }, { title: "Clear attendance?" });
   },
   "delete-participant": function(t){
     var id = t.getAttribute("data-id");
@@ -2858,7 +3001,10 @@ var ACTIONS = {
     if (!p) return;
     confirmModal('Remove "' + fullName(p) + '" from the directory and every session?', function(){
       state.participants = state.participants.filter(function(pp){ return pp.id !== id; });
-      state.events.forEach(function(e){ e.attendeeIds = (e.attendeeIds||[]).filter(function(pid){ return pid !== id; }); });
+      state.events.forEach(function(e){
+        e.attendeeIds = (e.attendeeIds||[]).filter(function(pid){ return pid !== id; });
+        e.attendedIds = (e.attendedIds||[]).filter(function(pid){ return pid !== id; });
+      });
       saveState(); render();
     }, { title: "Remove participant?" });
   },
@@ -3297,6 +3443,12 @@ document.addEventListener("change", function(e){
       ui.mailingListBoardId = t.value;
       saveState(); render();
     }
+  } else if (t.matches("input.att-check")){
+    var attEv = eventById(t.getAttribute("data-attended-event"));
+    if (attEv){
+      setAttended(attEv, t.getAttribute("data-participant"), t.checked);
+      saveState(); render();
+    }
   } else if (t.matches("#attendance-sort-select")){
     state.attendanceSortBy = t.value;
     saveLocalViewState(); render();
@@ -3319,7 +3471,8 @@ var NAME_HEADERS = ["name","fullname","participantname","teachername","attendeen
 var SCHOOL_HEADERS = ["school","schoolname","district","organization","institution","site"];
 var EMAIL_HEADERS = ["email","emailaddress"];
 var IEIN_HEADERS = ["iein","ieinnumber","educatorid","illinoiseducatorid"];
-var IGNORED_HEADERS = ["totalsessions","totalnumberofsessions","sessionsattended","sessioncount","numberofsessions","sessions"];
+var ATTENDED_HEADERS = ["attended","attendance","present","showedup","participated"];
+var IGNORED_HEADERS = ["totalsessions","totalnumberofsessions","sessionsattended","sessionssignedup","signedup","sessioncount","numberofsessions","sessions","session","date"];
 
 function normHeader(h){ return String(h||"").toLowerCase().trim().replace(/[^a-z0-9]/g, ""); }
 function matchCanonical(h){
@@ -3330,6 +3483,7 @@ function matchCanonical(h){
   if (SCHOOL_HEADERS.indexOf(n) !== -1) return "school";
   if (EMAIL_HEADERS.indexOf(n) !== -1) return "email";
   if (IEIN_HEADERS.indexOf(n) !== -1) return "iein";
+  if (ATTENDED_HEADERS.indexOf(n) !== -1) return "attended";
   if (IGNORED_HEADERS.indexOf(n) !== -1) return "ignore";
   return null;
 }
@@ -3365,10 +3519,11 @@ function importRows(headerRow, dataRows, targetSessionId){
   var count = 0;
   dataRows.forEach(function(r){
     if (!r || r.every(function(c){ return String(c===undefined?"":c).trim() === ""; })) return;
-    var rec = { firstName: "", lastName: "", name: "", school: "", email: "", iein: "", custom: {} };
+    var rec = { firstName: "", lastName: "", name: "", school: "", email: "", iein: "", attended: null, custom: {} };
     mapping.forEach(function(m, idx){
       var val = r[idx] !== undefined ? String(r[idx]).trim() : "";
       if (m.canon === "ignore"){ /* known field, not imported (e.g. a computed session count) */ }
+      else if (m.canon === "attended"){ if (val) rec.attended = /^(y|yes|true|x|1|attended|present)$/i.test(val); }
       else if (m.canon) rec[m.canon] = val;
       else if (m.header) rec.custom[m.header] = val;
     });
@@ -3398,7 +3553,11 @@ function importRows(headerRow, dataRows, targetSessionId){
     }
     if (targetSessionId){
       var ev = eventById(targetSessionId);
-      if (ev){ ev.attendeeIds = ev.attendeeIds || []; if (ev.attendeeIds.indexOf(target.id) === -1) ev.attendeeIds.push(target.id); }
+      if (ev){
+        ev.attendeeIds = ev.attendeeIds || [];
+        if (ev.attendeeIds.indexOf(target.id) === -1) ev.attendeeIds.push(target.id);
+        if (rec.attended !== null) setAttended(ev, target.id, rec.attended);
+      }
     }
     count++;
   });
@@ -3490,13 +3649,14 @@ function csvEscape(v){
   return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 function exportParticipantsCSV(){
-  var headers = ["First Name","Last Name","School","Email","IEIN"].concat(state.customFields).concat(["Total Sessions"]);
+  var headers = ["First Name","Last Name","School","Email","IEIN"].concat(state.customFields).concat(["Sessions Signed Up","Sessions Attended"]);
   var rows = [headers];
   sortedParticipants(state.participants).forEach(function(p){
-    var sessionCount = state.events.filter(function(e){ return (e.attendeeIds||[]).indexOf(p.id) !== -1; }).length;
+    var signedCount = state.events.filter(function(e){ return signedUpIds(e).indexOf(p.id) !== -1; }).length;
+    var attendedCount = state.events.filter(function(e){ return didAttend(e, p.id); }).length;
     var row = [p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
     state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
-    row.push(sessionCount);
+    row.push(signedCount, attendedCount);
     rows.push(row);
   });
   var csv = rows.map(function(r){ return r.map(csvEscape).join(","); }).join("\n");
@@ -3523,22 +3683,22 @@ function slugify(s){
 }
 
 function sessionAttendanceRows(session){
-  var attendees = sortedParticipants((session.attendeeIds || []).map(participantById).filter(Boolean));
+  var attendees = sortedParticipants(signedUpIds(session).map(participantById).filter(Boolean));
   return attendees.map(function(p){
-    var row = [session.title, eventDateRangeLabel(session), p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
+    var row = [session.title, eventDateRangeLabel(session), didAttend(session, p.id) ? "Yes" : "No", p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
     state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
     return row;
   });
 }
 
 function exportSessionAttendanceCSV(session){
-  var headers = ["Session","Date","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
+  var headers = ["Session","Date","Attended","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
   var rows = [headers].concat(sessionAttendanceRows(session));
   downloadCSVRows(rows, "attendance_" + slugify(session.title) + ".csv");
 }
 
 function exportAllAttendanceCSV(){
-  var headers = ["Session","Date","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
+  var headers = ["Session","Date","Attended","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
   var sessions = sortedEvents().filter(function(e){ return attendanceBoardIds().indexOf(e.boardId) !== -1; });
   var rows = [headers];
   sessions.forEach(function(session){
