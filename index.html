@@ -297,6 +297,7 @@ table.data-table tbody tr:hover{background:#FAFBFF;}
 table.data-table input, table.data-table select{border:1px solid transparent;background:transparent;padding:6px 7px;border-radius:6px;width:100%;min-width:90px;}
 table.data-table input:hover, table.data-table select:hover{border-color:var(--border);}
 table.data-table input:focus, table.data-table select:focus{border-color:var(--blue-600);background:#fff;}
+table.data-table select[data-field="role"]{min-width:165px;}
 table.data-table tfoot td{font-weight:700;font-family:var(--font-mono);background:#F8FAFC;border-top:2px solid var(--border);}
 tr.budget-group-header td{background:var(--blue-800);color:#fff;font-family:var(--font-heading);font-weight:800;font-size:12.5px;padding:8px 12px;display:flex;align-items:center;gap:8px;}
 tr.budget-group-header .color-dot{border:1.5px solid rgba(255,255,255,0.85);}
@@ -740,6 +741,30 @@ function ensureDefaults(loaded){
   return merged;
 }
 
+var ROLE_OPTIONS = ["Teacher","Paraprofessional","Coach","Administrator","Counselor","IT Admin","Other"];
+/* Map free-text role values (from imports or old custom fields) onto the fixed options. */
+function normalizeRole(v){
+  var raw = String(v === undefined || v === null ? "" : v).trim();
+  if (!raw) return "";
+  var n = raw.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  for (var i = 0; i < ROLE_OPTIONS.length; i++){ if (ROLE_OPTIONS[i].toLowerCase() === n) return ROLE_OPTIONS[i]; }
+  if (/\bcoach/.test(n)) return "Coach";
+  if (/\bpara\b|paraprofessional|paraeducator|\baide\b|(teacher|teaching|instructional|classroom) assistant/.test(n)) return "Paraprofessional";
+  if (/\b(it|tech|technology|technician|network|systems?)\b/.test(n)) return "IT Admin";
+  if (/counsel/.test(n)) return "Counselor";
+  if (/admin|principal|superintendent|director|dean|coordinator/.test(n)) return "Administrator";
+  if (/teach|educator|instructor|faculty/.test(n)) return "Teacher";
+  return "Other";
+}
+function roleSelectHTML(attrs, value){
+  var html = '<select ' + attrs + '><option value=""' + (value ? '' : ' selected') + '>&mdash;</option>';
+  ROLE_OPTIONS.forEach(function(r){ html += '<option' + (value === r ? ' selected' : '') + '>' + r + '</option>'; });
+  return html + '</select>';
+}
+function dropRoleCustomField(s){
+  s.customFields = (s.customFields || []).filter(function(f){ return String(f).trim().toLowerCase() !== "role"; });
+}
+
 function migrateParticipant(p){
   if (p.firstName === undefined && p.lastName === undefined){
     var full = (p.name || "").trim();
@@ -755,12 +780,19 @@ function migrateParticipant(p){
   if (p.firstName === undefined) p.firstName = "";
   if (p.lastName === undefined) p.lastName = "";
   delete p.name;
+  if (p.role === undefined){
+    /* Move a hand-made "Role" info field into the built-in Role column. */
+    var roleKey = p.custom && Object.keys(p.custom).find(function(k){ return k.trim().toLowerCase() === "role"; });
+    p.role = roleKey ? normalizeRole(p.custom[roleKey]) : "";
+    if (roleKey) delete p.custom[roleKey];
+  }
   return p;
 }
 
 function buildState(loaded){
   var s = ensureDefaults(loaded);
   s.participants.forEach(migrateParticipant);
+  dropRoleCustomField(s);
   if (loaded && loaded.holidaysSeeded === undefined){
     s.holidaysSeeded = false;
   }
@@ -1497,7 +1529,7 @@ function attendanceSummaryHTML(groups){
 }
 
 function tableHeaderCells(){
-  var cells = '<th>First Name</th><th>Last Name</th><th>School</th><th>Email</th><th>IEIN</th>';
+  var cells = '<th>First Name</th><th>Last Name</th><th>School</th><th>Email</th><th>IEIN</th><th>Role</th>';
   state.customFields.forEach(function(f){
     cells += '<th>' + esc(f) + ' <button type="button" class="th-remove" data-action="delete-field" data-field="' + attr(f) + '" title="Remove this field">&times;</button></th>';
   });
@@ -1556,6 +1588,7 @@ function participantDetailModalHTML(participantId){
   if (p.school) html += '<div><span style="color:var(--text-muted);">School</span><br>' + esc(p.school) + '</div>';
   if (p.email) html += '<div><span style="color:var(--text-muted);">Email</span><br>' + esc(p.email) + '</div>';
   if (p.iein) html += '<div><span style="color:var(--text-muted);">IEIN</span><br>' + esc(p.iein) + '</div>';
+  if (p.role) html += '<div><span style="color:var(--text-muted);">Role</span><br>' + esc(p.role) + '</div>';
   state.customFields.forEach(function(f){
     var val = p.custom && p.custom[f];
     if (val) html += '<div><span style="color:var(--text-muted);">' + esc(f) + '</span><br>' + esc(val) + '</div>';
@@ -1589,6 +1622,7 @@ function participantCells(p){
   html += '<td><input type="text" value="' + attr(p.school||"") + '" data-field="school" data-participant="' + p.id + '"></td>';
   html += '<td><input type="text" value="' + attr(p.email||"") + '" data-field="email" data-participant="' + p.id + '"></td>';
   html += '<td><input type="text" value="' + attr(p.iein||"") + '" data-field="iein" data-participant="' + p.id + '"></td>';
+  html += '<td>' + roleSelectHTML('data-field="role" data-participant="' + p.id + '" aria-label="Role"', p.role || "") + '</td>';
   state.customFields.forEach(function(f){
     var val = (p.custom && p.custom[f]) || "";
     html += '<td><input type="text" value="' + attr(val) + '" data-customfield="' + attr(f) + '" data-participant="' + p.id + '"></td>';
@@ -2682,7 +2716,10 @@ function attendeeModalHTML(sessionId){
         '<div class="field"><label>School</label><input type="text" name="school"></div>' +
         '<div class="field"><label>Email</label><input type="email" name="email"></div>' +
       '</div>' +
-      '<div class="field"><label>IEIN</label><input type="text" name="iein"></div>' +
+      '<div class="field-row">' +
+        '<div class="field"><label>IEIN</label><input type="text" name="iein"></div>' +
+        '<div class="field"><label>Role</label>' + roleSelectHTML('name="role"', "") + '</div>' +
+      '</div>' +
     '</div>' +
     '<div class="modal-footer">' +
       '<button type="button" class="btn" data-action="close-modal">Cancel</button>' +
@@ -2954,7 +2991,7 @@ var ACTIONS = {
     var firstName = (fd.get("firstName")||"").toString().trim();
     var lastName = (fd.get("lastName")||"").toString().trim();
     if (!firstName) return;
-    var p = { id: uid(), firstName: firstName, lastName: lastName, school: (fd.get("school")||"").toString(), email: (fd.get("email")||"").toString(), iein: (fd.get("iein")||"").toString(), custom: {} };
+    var p = { id: uid(), firstName: firstName, lastName: lastName, school: (fd.get("school")||"").toString(), email: (fd.get("email")||"").toString(), iein: (fd.get("iein")||"").toString(), role: normalizeRole(fd.get("role")), custom: {} };
     state.participants.push(p);
     var ev = eventById(eventId);
     if (ev){ ev.attendeeIds = ev.attendeeIds || []; ev.attendeeIds.push(p.id); }
@@ -3015,6 +3052,7 @@ var ACTIONS = {
     var fd = new FormData(form);
     var name = (fd.get("fieldName")||"").toString().trim();
     if (!name) return;
+    if (name.toLowerCase() === "role"){ closeModal(); return; } /* Role is a built-in column */
     var exists = state.customFields.some(function(f){ return f.toLowerCase() === name.toLowerCase(); });
     if (!exists) state.customFields.push(name);
     saveState(); closeModal(); render();
@@ -3471,24 +3509,61 @@ var NAME_HEADERS = ["name","fullname","participantname","teachername","attendeen
 var SCHOOL_HEADERS = ["school","schoolname","district","organization","institution","site"];
 var EMAIL_HEADERS = ["email","emailaddress"];
 var IEIN_HEADERS = ["iein","ieinnumber","educatorid","illinoiseducatorid"];
+var ROLE_HEADERS = ["role","position","jobtitle","participantrole","jobrole"];
 var ATTENDED_HEADERS = ["attended","attendance","present","showedup","participated"];
 var IGNORED_HEADERS = ["totalsessions","totalnumberofsessions","sessionsattended","sessionssignedup","signedup","sessioncount","numberofsessions","sessions","session","date"];
 
-function normHeader(h){ return String(h||"").toLowerCase().trim().replace(/[^a-z0-9]/g, ""); }
+function normHeader(h){ return String(h||"").toLowerCase().replace(/\([^)]*\)/g, " ").trim().replace(/[^a-z0-9]/g, ""); }
 function matchCanonical(h){
   var n = normHeader(h);
+  if (!n) return null;
   if (FIRSTNAME_HEADERS.indexOf(n) !== -1) return "firstName";
   if (LASTNAME_HEADERS.indexOf(n) !== -1) return "lastName";
   if (NAME_HEADERS.indexOf(n) !== -1) return "name";
   if (SCHOOL_HEADERS.indexOf(n) !== -1) return "school";
   if (EMAIL_HEADERS.indexOf(n) !== -1) return "email";
   if (IEIN_HEADERS.indexOf(n) !== -1) return "iein";
+  if (ROLE_HEADERS.indexOf(n) !== -1) return "role";
   if (ATTENDED_HEADERS.indexOf(n) !== -1) return "attended";
   if (IGNORED_HEADERS.indexOf(n) !== -1) return "ignore";
+  /* Looser matching for headers from Zoom, Teams, Google Forms, etc.
+     e.g. "User Email", "Participant First Name", "Name (Original Name)", "Full Name". */
+  if (/e?mail/.test(n)) return "email";
+  if (/iein|educatorid/.test(n)) return "iein";
+  if (/first.*name|givenname|firstname/.test(n)) return "firstName";
+  if (/last.*name|surname|familyname/.test(n)) return "lastName";
+  if (/school|district|organi[sz]ation|institution|employer|company/.test(n)) return "school";
+  if (/name$/.test(n) && !/user(?!s)|screen|display|meeting|event|session|host|topic|file/.test(n)) return "name";
   return null;
 }
 
+/* Find the header row: spreadsheets often have a title or meeting summary above the real column headers. */
+function findHeaderRowIndex(rows){
+  var best = 0, bestScore = 0, limit = Math.min(rows.length, 25);
+  for (var i = 0; i < limit; i++){
+    var seen = {}, score = 0;
+    (rows[i] || []).forEach(function(c){
+      var canon = matchCanonical(c);
+      if (canon && canon !== "ignore" && !seen[canon]){ seen[canon] = true; score++; }
+    });
+    if (!(seen.email || seen.name || seen.firstName || seen.lastName)) score = 0;
+    if (score > bestScore){ best = i; bestScore = score; }
+  }
+  return best;
+}
+
+function detectDelimiter(text){
+  var firstLines = text.split(/\r?\n/).slice(0, 10).join("\n");
+  var counts = { ",": 0, ";": 0, "\t": 0 };
+  for (var i = 0; i < firstLines.length; i++){ if (counts.hasOwnProperty(firstLines[i])) counts[firstLines[i]]++; }
+  if (counts["\t"] > counts[","] && counts["\t"] >= counts[";"]) return "\t";
+  if (counts[";"] > counts[","]) return ";";
+  return ",";
+}
+
 function parseCSV(text){
+  text = String(text || "").replace(/^\uFEFF/, "");
+  var delim = detectDelimiter(text);
   var rows = [], row = [], field = "", inQuotes = false;
   for (var i = 0; i < text.length; i++){
     var c = text[i];
@@ -3498,7 +3573,7 @@ function parseCSV(text){
       } else field += c;
     } else {
       if (c === '"') inQuotes = true;
-      else if (c === ","){ row.push(field); field = ""; }
+      else if (c === delim){ row.push(field); field = ""; }
       else if (c === "\n"){ row.push(field); rows.push(row); row = []; field = ""; }
       else if (c === "\r"){ /* skip */ }
       else field += c;
@@ -3509,17 +3584,20 @@ function parseCSV(text){
 }
 
 function importRows(headerRow, dataRows, targetSessionId){
+  var newFields = [];
   var mapping = headerRow.map(function(h){ return { header: String(h||"").trim(), canon: matchCanonical(h) }; });
   mapping.forEach(function(m){
     if (!m.canon && m.header){
-      var exists = state.customFields.some(function(f){ return f.toLowerCase() === m.header.toLowerCase(); });
-      if (!exists) state.customFields.push(m.header);
+      /* Reuse an existing field whose name differs only by case/spacing (e.g. "GRADE" -> "Grade"). */
+      var existingField = state.customFields.find(function(f){ return f.trim().toLowerCase() === m.header.toLowerCase(); });
+      if (existingField) m.header = existingField;
+      else if (newFields.indexOf(m.header) === -1) newFields.push(m.header);
     }
   });
   var count = 0;
   dataRows.forEach(function(r){
     if (!r || r.every(function(c){ return String(c===undefined?"":c).trim() === ""; })) return;
-    var rec = { firstName: "", lastName: "", name: "", school: "", email: "", iein: "", attended: null, custom: {} };
+    var rec = { firstName: "", lastName: "", name: "", school: "", email: "", iein: "", role: "", attended: null, custom: {} };
     mapping.forEach(function(m, idx){
       var val = r[idx] !== undefined ? String(r[idx]).trim() : "";
       if (m.canon === "ignore"){ /* known field, not imported (e.g. a computed session count) */ }
@@ -3544,11 +3622,12 @@ function importRows(headerRow, dataRows, targetSessionId){
       if (rec.school) existing.school = rec.school;
       if (rec.email) existing.email = rec.email;
       if (rec.iein) existing.iein = rec.iein;
+      if (rec.role) existing.role = normalizeRole(rec.role);
       existing.custom = existing.custom || {};
       Object.keys(rec.custom).forEach(function(k){ if (rec.custom[k]) existing.custom[k] = rec.custom[k]; });
       target = existing;
     } else {
-      target = { id: uid(), firstName: rec.firstName, lastName: rec.lastName, school: rec.school, email: rec.email, iein: rec.iein, custom: rec.custom };
+      target = { id: uid(), firstName: rec.firstName, lastName: rec.lastName, school: rec.school, email: rec.email, iein: rec.iein, role: normalizeRole(rec.role), custom: rec.custom };
       state.participants.push(target);
     }
     if (targetSessionId){
@@ -3561,18 +3640,44 @@ function importRows(headerRow, dataRows, targetSessionId){
     }
     count++;
   });
+  if (!count){
+    alertModal(noRowsImportedMessage(headerRow, "a name or email column"), "Nothing imported");
+    return;
+  }
+  /* Only add new info-field columns once something was actually imported. */
+  newFields.forEach(function(f){ state.customFields.push(f); });
   saveState(); render();
   alertModal("Imported " + count + " participant" + (count === 1 ? "" : "s") + ".", "Import complete");
 }
 
+function noRowsImportedMessage(headerRow, needed){
+  var headers = (headerRow || []).map(function(h){ return String(h||"").trim(); }).filter(Boolean);
+  return "No rows could be imported. The file needs " + needed + " (for example \"First Name\", \"Last Name\", \"Name\", or \"Email\"). " +
+    "Columns found: " + (headers.length ? headers.join(", ") : "(none)") + ".";
+}
+
+function deliverRows(rows, callback){
+  rows = (rows || []).filter(function(r){ return r && r.some(function(c){ return String(c===undefined||c===null?"":c).trim() !== ""; }); });
+  if (!rows.length){
+    alertModal("That file appears to be empty.", "Nothing imported");
+    return;
+  }
+  var h = findHeaderRowIndex(rows);
+  callback(rows[h], rows.slice(h + 1));
+}
+
 function readSpreadsheetRows(file, callback){
   var ext = file.name.split(".").pop().toLowerCase();
-  if (ext === "csv"){
+  function fail(err){
+    console.error("Import failed", err);
+    alertModal("That file could not be read. If it is an Excel file, try saving it as CSV and importing again." + (err && err.message ? " (" + err.message + ")" : ""), "Import failed");
+  }
+  if (ext === "csv" || ext === "txt" || ext === "tsv"){
     var reader = new FileReader();
     reader.onload = function(e){
-      var rows = parseCSV(e.target.result);
-      if (rows.length) callback(rows[0], rows.slice(1));
+      try { deliverRows(parseCSV(e.target.result), callback); } catch (err){ fail(err); }
     };
+    reader.onerror = function(){ fail(reader.error); };
     reader.readAsText(file);
   } else if (ext === "xlsx" || ext === "xls"){
     if (typeof XLSX === "undefined"){
@@ -3581,12 +3686,21 @@ function readSpreadsheetRows(file, callback){
     }
     var reader2 = new FileReader();
     reader2.onload = function(e){
-      var data = new Uint8Array(e.target.result);
-      var wb = XLSX.read(data, { type: "array" });
-      var sheet = wb.Sheets[wb.SheetNames[0]];
-      var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-      if (rows.length) callback(rows[0], rows.slice(1));
+      try {
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data, { type: "array" });
+        /* Use the first sheet that actually has data (some exports have a blank or summary first tab). */
+        var rows = [];
+        for (var i = 0; i < wb.SheetNames.length; i++){
+          var r = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[i]], { header: 1, defval: "", raw: false });
+          var hasPeople = r.slice(0, 25).some(function(row){ return row.some(function(c){ var k = matchCanonical(c); return k && k !== "ignore"; }); });
+          if (hasPeople){ rows = r; break; }
+          if (!rows.length && r.length) rows = r;
+        }
+        deliverRows(rows, callback);
+      } catch (err){ fail(err); }
     };
+    reader2.onerror = function(){ fail(reader2.error); };
     reader2.readAsArrayBuffer(file);
   } else {
     alertModal("Unsupported file type. Please upload a .csv, .xlsx, or .xls file.", "Import unavailable");
@@ -3631,6 +3745,10 @@ function importMailingListRows(headerRow, dataRows, boardId){
     count++;
   });
   saveState(); render();
+  if (!count){
+    alertModal(noRowsImportedMessage(headerRow, "an email column"), "Nothing imported");
+    return;
+  }
   alertModal("Imported " + count + " subscriber" + (count === 1 ? "" : "s") + ".", "Import complete");
 }
 
@@ -3649,12 +3767,12 @@ function csvEscape(v){
   return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
 }
 function exportParticipantsCSV(){
-  var headers = ["First Name","Last Name","School","Email","IEIN"].concat(state.customFields).concat(["Sessions Signed Up","Sessions Attended"]);
+  var headers = ["First Name","Last Name","School","Email","IEIN","Role"].concat(state.customFields).concat(["Sessions Signed Up","Sessions Attended"]);
   var rows = [headers];
   sortedParticipants(state.participants).forEach(function(p){
     var signedCount = state.events.filter(function(e){ return signedUpIds(e).indexOf(p.id) !== -1; }).length;
     var attendedCount = state.events.filter(function(e){ return didAttend(e, p.id); }).length;
-    var row = [p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
+    var row = [p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||"", p.role||""];
     state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
     row.push(signedCount, attendedCount);
     rows.push(row);
@@ -3685,20 +3803,20 @@ function slugify(s){
 function sessionAttendanceRows(session){
   var attendees = sortedParticipants(signedUpIds(session).map(participantById).filter(Boolean));
   return attendees.map(function(p){
-    var row = [session.title, eventDateRangeLabel(session), didAttend(session, p.id) ? "Yes" : "No", p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||""];
+    var row = [session.title, eventDateRangeLabel(session), didAttend(session, p.id) ? "Yes" : "No", p.firstName||"", p.lastName||"", p.school||"", p.email||"", p.iein||"", p.role||""];
     state.customFields.forEach(function(f){ row.push((p.custom && p.custom[f]) || ""); });
     return row;
   });
 }
 
 function exportSessionAttendanceCSV(session){
-  var headers = ["Session","Date","Attended","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
+  var headers = ["Session","Date","Attended","First Name","Last Name","School","Email","IEIN","Role"].concat(state.customFields);
   var rows = [headers].concat(sessionAttendanceRows(session));
   downloadCSVRows(rows, "attendance_" + slugify(session.title) + ".csv");
 }
 
 function exportAllAttendanceCSV(){
-  var headers = ["Session","Date","Attended","First Name","Last Name","School","Email","IEIN"].concat(state.customFields);
+  var headers = ["Session","Date","Attended","First Name","Last Name","School","Email","IEIN","Role"].concat(state.customFields);
   var sessions = sortedEvents().filter(function(e){ return attendanceBoardIds().indexOf(e.boardId) !== -1; });
   var rows = [headers];
   sessions.forEach(function(session){
@@ -3749,6 +3867,7 @@ function handleBackupFile(file){
     confirmModal("This will replace everything currently in the calendar (boards, events, participants, budgets) with the contents of this backup file. This can't be undone. Continue?", function(){
       state = ensureDefaults(restored);
       state.participants.forEach(migrateParticipant);
+      dropRoleCustomField(state);
       ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", attendanceGroupCollapsed: {}, budgetChartsBoardFilter: "all", budgetSortField: null, budgetSortCategory: null, budgetSortDir: "asc", lineItemGroupCollapsed: {} };
       saveState(); render();
       alertModal("Backup restored successfully.", "Import complete");
