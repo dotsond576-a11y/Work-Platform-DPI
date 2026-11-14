@@ -423,6 +423,44 @@ tr.att-no-show input[type=text]{color:var(--text-muted);}
 .empty-state{text-align:center;padding:50px 20px;color:var(--text-muted);}
 .empty-state .big{font-size:32px;margin-bottom:8px;}
 
+/* ========================= Attendance reports ========================= */
+.report-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 18px;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:18px;}
+.report-filters .field{margin:0;}
+.report-filters select,.report-filters input[type=date]{width:auto;padding:7px 10px;font-size:13px;}
+.series-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.series-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;color:var(--text-muted);}
+.series-chip.on{border-color:var(--blue-800);color:var(--text);background:var(--blue-100);}
+.series-chip .chk{font-size:11px;width:11px;display:inline-block;text-align:center;}
+.report-note{font-size:12.5px;color:var(--text-muted);background:#F8FAFC;border:1px dashed var(--border);border-radius:8px;padding:9px 12px;margin-bottom:18px;}
+.chart-sub{margin:-8px 0 14px;font-size:12.5px;color:var(--text-muted);}
+.stat-card .hint{font-size:11.5px;color:var(--text-muted);margin-top:2px;}
+.report-print-header{display:none;}
+.viz-mark{cursor:default;outline:none;}
+.viz-mark:hover,.viz-mark:focus{opacity:.82;}
+.viz-pt{outline:none;cursor:default;}
+.viz-pt:hover .mk,.viz-pt:focus .mk{stroke:#1A202C;}
+.legend-line{width:18px;height:10px;flex-shrink:0;}
+#chart-tip{position:fixed;pointer-events:none;z-index:200;background:#fff;border:1px solid var(--border);box-shadow:var(--shadow-md);border-radius:8px;padding:8px 11px;font-size:12px;color:var(--text-muted);max-width:280px;display:none;line-height:1.45;}
+#chart-tip .tip-value{color:var(--text);font-weight:700;font-size:13px;}
+
+@media print{
+  @page{margin:14mm;}
+  html,body{height:auto;background:#fff;}
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  #app{display:block;height:auto;}
+  .layout{display:block;}
+  #app-header,.sidebar,.upcoming-panel,.side-list,.no-print,#chart-tip,#modal-root{display:none !important;}
+  main#main-content{overflow:visible;padding:0;display:block;}
+  .two-col{display:block;}
+  .report-print-header{display:block;margin-bottom:18px;padding-bottom:10px;border-bottom:3px solid var(--orange-600);}
+  .report-print-header h1{font-family:var(--font-heading);font-size:22px;margin:0 0 4px;color:var(--blue-800);}
+  .report-print-header .meta{font-size:12px;color:var(--text-muted);}
+  .chart-card,.stat-cards,.data-table-wrap tr{break-inside:avoid;}
+  .data-table-wrap{overflow:visible;}
+  table.data-table{min-width:0;}
+  table.data-table th{position:static;}
+}
+
 @media (max-width: 1100px){ .upcoming-panel{display:none !important;} }
 @media (max-width: 780px){ .sidebar{display:none !important;} .two-col{flex-direction:column;} .side-list{width:100%;} }
 
@@ -994,7 +1032,11 @@ var ui = {
   budgetSortField: null,
   budgetSortCategory: null,
   budgetSortDir: "asc",
-  lineItemGroupCollapsed: {}
+  lineItemGroupCollapsed: {},
+  reportGroupKeys: null,
+  reportFrom: "",
+  reportTo: "",
+  reportPreset: "all"
 };
 
 /* ============================================================
@@ -1119,6 +1161,7 @@ function renderUpcoming(){
 }
 
 function renderMain(){
+  hideChartTip();
   var el = document.getElementById("main-content");
   if (state.currentView === "calendar") el.innerHTML = calendarViewHTML();
   else if (state.currentView === "list") el.innerHTML = listViewHTML();
@@ -1418,10 +1461,518 @@ function attendanceSessionGroups(){
   return groups;
 }
 
+/* ============================================================
+   Attendance reports
+   ============================================================ */
+/* Validated colorblind-safe categorical palette (fixed order, never cycled by rank). */
+var CHART_SERIES = ["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#6250d6","#e34948"];
+var CHART_ABSENT = "#CBD5E1";
+var CHART_SINGLE = "#2a78d6";
+var RETENTION_RAMP = ["#86b6ef","#3987e5","#1c5cab","#0d366b"];
+var RETENTION_LABELS = ["1 session","2 sessions","3 sessions","4+ sessions"];
+
+/* Reports group sessions the same way the Attendance sidebar does: one
+   series per board, or per board subcategory (e.g. "SI 26") when it has them.
+   Only people still in the directory are counted. */
+function rptSignedUp(e){ return signedUpIds(e).filter(function(id){ return !!participantById(id); }); }
+function rptAttended(e){ return attendedIds(e).filter(function(id){ return !!participantById(id); }); }
+function reportAllGroups(){ return attendanceSessionGroups(); }
+function seriesLabel(key){
+  var g = reportAllGroups().find(function(x){ return x.key === key; });
+  return g ? g.label : "Series";
+}
+/* A series keeps its color whatever is filtered: the slot comes from its place in the full series list. */
+function seriesSlot(key){
+  var i = -1;
+  reportAllGroups().forEach(function(g, idx){ if (g.key === key) i = idx; });
+  return i < 0 ? 0 : i % CHART_SERIES.length;
+}
+function seriesColor(key){ return CHART_SERIES[seriesSlot(key)]; }
+
+function markerSVG(slot, x, y, color){
+  var r = 4.5, a = ' fill="' + color + '" stroke="#fff" stroke-width="2" class="mk"';
+  var k = slot % 4;
+  if (k === 0) return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '"' + a + '/>';
+  if (k === 1) return '<rect x="' + (x-r) + '" y="' + (y-r) + '" width="' + (2*r) + '" height="' + (2*r) + '" rx="1.5"' + a + '/>';
+  if (k === 2) return '<path d="M' + x + ' ' + (y-r-1.5) + ' L' + (x+r+1.5) + ' ' + (y+r) + ' L' + (x-r-1.5) + ' ' + (y+r) + ' Z"' + a + '/>';
+  return '<path d="M' + x + ' ' + (y-r-1.5) + ' L' + (x+r+1.5) + ' ' + y + ' L' + x + ' ' + (y+r+1.5) + ' L' + (x-r-1.5) + ' ' + y + ' Z"' + a + '/>';
+}
+function lineKeySVG(slot, color){
+  return '<svg class="legend-line" viewBox="0 0 18 10"><line x1="0" y1="5" x2="18" y2="5" stroke="' + color + '" stroke-width="2"/>' + markerSVG(slot, 9, 5, color) + '</svg>';
+}
+
+function shortDateRange(e){
+  var d1 = parseISO(e.date), d2 = parseISO(eventEndDate(e));
+  if (!isMultiDay(e)) return MONTH_SHORT[d1.getMonth()] + " " + d1.getDate() + ", " + d1.getFullYear();
+  if (d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth()) return MONTH_SHORT[d1.getMonth()] + " " + d1.getDate() + "–" + d2.getDate() + ", " + d1.getFullYear();
+  return MONTH_SHORT[d1.getMonth()] + " " + d1.getDate() + " – " + MONTH_SHORT[d2.getMonth()] + " " + d2.getDate() + ", " + d2.getFullYear();
+}
+function fmtPct(x){ return (x === null || x === undefined || isNaN(x)) ? "—" : Math.round(x * 100) + "%"; }
+function fmtNum(n){ return Number(n || 0).toLocaleString(); }
+function trunc(s, n){ s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+function plural(n, one, many){ return fmtNum(n) + " " + (n === 1 ? one : (many || one + "s")); }
+
+function niceScale(maxVal, ticks){
+  ticks = ticks || 4;
+  if (!(maxVal > 0)) maxVal = 1;
+  var raw = maxVal / ticks;
+  var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  var norm = raw / mag;
+  var step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  if (step < 1) step = 1;
+  return { step: step, max: Math.ceil(maxVal / step) * step };
+}
+
+function reportGroupKeys(){
+  var all = reportAllGroups().map(function(g){ return g.key; });
+  if (!ui.reportGroupKeys) return all;
+  return all.filter(function(k){ return ui.reportGroupKeys.indexOf(k) !== -1; });
+}
+
+function reportDatePresets(){
+  var tracked = attendanceBoardIds();
+  var schoolYears = {}, summers = {};
+  state.events.forEach(function(e){
+    if (!e.date || tracked.indexOf(e.boardId) === -1) return;
+    var d = parseISO(e.date), m = d.getMonth(), y = d.getFullYear();
+    schoolYears[m >= 7 ? y : y - 1] = true;
+    if (m >= 5 && m <= 7) summers[y] = true;
+  });
+  var list = [{ id: "all", label: "All dates", from: "", to: "" }];
+  Object.keys(schoolYears).map(Number).sort(function(a,b){ return b - a; }).forEach(function(y){
+    list.push({ id: "sy" + y, label: "School year " + y + "–" + String(y + 1).slice(2) + " (Aug–Jul)", from: y + "-08-01", to: (y + 1) + "-07-31" });
+  });
+  Object.keys(summers).map(Number).sort(function(a,b){ return b - a; }).forEach(function(y){
+    list.push({ id: "su" + y, label: "Summer " + y + " (Jun–Aug)", from: y + "-06-01", to: y + "-08-31" });
+  });
+  return list;
+}
+
+/* Returns [{event, key}] for the selected series and date range, oldest first. */
+function reportSessions(){
+  var keys = reportGroupKeys(), list = [];
+  reportAllGroups().forEach(function(g){
+    if (keys.indexOf(g.key) === -1) return;
+    g.sessions.forEach(function(e){
+      if (ui.reportFrom && eventEndDate(e) < ui.reportFrom) return;
+      if (ui.reportTo && e.date > ui.reportTo) return;
+      list.push({ event: e, key: g.key });
+    });
+  });
+  return list.sort(function(a, b){ return (a.event.date || "").localeCompare(b.event.date || ""); });
+}
+
+function computeReport(){
+  var groupKeys = reportGroupKeys();
+  var sessions = reportSessions();
+  var today = todayISO();
+  var past = sessions.filter(function(s){ return s.event.date <= today; });
+  var held = past.filter(function(s){ return rptAttended(s.event).length > 0; });
+  var unrecorded = past.filter(function(s){ return rptAttended(s.event).length === 0; }).map(function(s){ return s.event; });
+  var upcoming = sessions.filter(function(s){ return s.event.date > today; }).map(function(s){ return s.event; });
+  var perPerson = {}, perSeries = {}, schools = {};
+  var totals = { registered: 0, present: 0 };
+  var rows = held.map(function(h){
+    var e = h.event, reg = rptSignedUp(e), pres = rptAttended(e);
+    var row = { event: e, key: h.key, registered: reg.length, present: pres.length, absent: reg.length - pres.length, rate: reg.length ? pres.length / reg.length : null };
+    totals.registered += row.registered; totals.present += row.present;
+    var s = perSeries[h.key] || (perSeries[h.key] = { key: h.key, sessions: 0, registered: 0, present: 0, people: {} });
+    s.sessions++; s.registered += row.registered; s.present += row.present;
+    pres.forEach(function(pid){
+      perPerson[pid] = (perPerson[pid] || 0) + 1;
+      s.people[pid] = (s.people[pid] || 0) + 1;
+      var school = (participantById(pid).school || "").trim();
+      if (school){
+        var key = school.toLowerCase();
+        var sc = schools[key] || (schools[key] = { name: school, people: {}, attendance: 0 });
+        sc.people[pid] = true; sc.attendance++;
+      }
+    });
+    return row;
+  });
+  var series = groupKeys.filter(function(id){ return perSeries[id]; }).map(function(id){
+    var s = perSeries[id];
+    s.unique = Object.keys(s.people).length;
+    s.rate = s.registered ? s.present / s.registered : null;
+    s.avg = s.sessions ? s.present / s.sessions : 0;
+    s.buckets = [0, 0, 0, 0];
+    Object.keys(s.people).forEach(function(pid){ s.buckets[Math.min(s.people[pid], 4) - 1]++; });
+    return s;
+  });
+  var schoolList = Object.keys(schools).map(function(k){
+    var sc = schools[k]; return { name: sc.name, unique: Object.keys(sc.people).length, attendance: sc.attendance };
+  }).sort(function(a, b){ return b.unique - a.unique || b.attendance - a.attendance || a.name.localeCompare(b.name); });
+  var uniqueIds = Object.keys(perPerson);
+  return {
+    groupKeys: groupKeys, rows: rows, upcoming: upcoming, unrecorded: unrecorded, series: series, schools: schoolList,
+    sessionsHeld: rows.length,
+    registered: totals.registered,
+    present: totals.present,
+    unique: uniqueIds.length,
+    returning: uniqueIds.filter(function(pid){ return perPerson[pid] >= 2; }).length,
+    avg: rows.length ? totals.present / rows.length : 0,
+    rate: totals.registered ? totals.present / totals.registered : null
+  };
+}
+
+function reportRangeLabel(R){
+  if (!ui.reportFrom && !ui.reportTo){
+    if (R && R.rows.length) return "All dates (" + fmtDateLong(R.rows[0].event.date) + " – " + fmtDateLong(R.rows[R.rows.length - 1].event.date) + ")";
+    return "All dates";
+  }
+  if (ui.reportFrom && ui.reportTo) return fmtDateLong(ui.reportFrom) + " – " + fmtDateLong(ui.reportTo);
+  if (ui.reportFrom) return "From " + fmtDateLong(ui.reportFrom);
+  return "Through " + fmtDateLong(ui.reportTo);
+}
+
+/* ---------- View ---------- */
+function reportFiltersHTML(){
+  var presets = reportDatePresets();
+  var tracked = reportAllGroups().map(function(g){ return g.key; });
+  var selected = reportGroupKeys();
+  var html = '<div class="report-filters no-print">';
+  html += '<div class="field"><label for="report-preset">Date range</label><select id="report-preset">' +
+    presets.map(function(p){ return '<option value="' + p.id + '"' + (ui.reportPreset === p.id ? " selected" : "") + '>' + esc(p.label) + '</option>'; }).join("") +
+    '<option value="custom"' + (ui.reportPreset === "custom" ? " selected" : "") + '>Custom range</option>' +
+  '</select></div>';
+  html += '<div class="field"><label for="report-from">From</label><input type="date" id="report-from" value="' + attr(ui.reportFrom) + '"></div>';
+  html += '<div class="field"><label for="report-to">To</label><input type="date" id="report-to" value="' + attr(ui.reportTo) + '"></div>';
+  html += '<div class="field" style="flex:1;min-width:240px;"><label>Series</label><div class="series-chips">' +
+    tracked.map(function(id){
+      var on = selected.indexOf(id) !== -1;
+      return '<button type="button" class="series-chip ' + (on ? "on" : "") + '" data-action="report-toggle-series" data-id="' + attr(id) + '" aria-pressed="' + on + '">' +
+        '<span class="chk">' + (on ? "&#10003;" : "") + '</span><span class="color-dot" style="background:' + seriesColor(id) + '"></span>' + esc(seriesLabel(id)) + '</button>';
+    }).join("") +
+  '</div></div>';
+  html += '</div>';
+  return html;
+}
+
+function reportsBodyHTML(){
+  var R = computeReport();
+  var html = '<div class="report-root">';
+  html += '<div class="report-print-header"><h1>Attendance Report</h1>' +
+    '<div class="meta"><strong>' + esc(state.title) + '</strong></div>' +
+    '<div class="meta">Series: ' + esc(R.groupKeys.map(seriesLabel).join(", ") || "None") + '</div>' +
+    '<div class="meta">Dates: ' + esc(reportRangeLabel(R)) + ' &middot; Generated ' + esc(fmtDateLong(todayISO())) + '</div></div>';
+  html += reportFiltersHTML();
+  if (!reportAllGroups().length) return html + emptyState("No sessions to report on yet.", "Add an event board above to start tracking attendance.") + '</div>';
+  if (!R.groupKeys.length) return html + emptyState("No series selected.", "Pick at least one series above to build the report.") + '</div>';
+
+  var upcomingNote = '';
+  if (R.upcoming.length){
+    var upReg = R.upcoming.reduce(function(sum, e){ return sum + rptSignedUp(e).length; }, 0);
+    upcomingNote = '<div class="report-note">' + plural(R.upcoming.length, "upcoming session") + ' in this range (' + plural(upReg, "sign-up") + ' so far) ' +
+      (R.upcoming.length === 1 ? 'is' : 'are') + ' not counted in the attendance numbers until ' + (R.upcoming.length === 1 ? 'its' : 'their') + ' date has passed.</div>';
+  }
+  if (R.unrecorded.length){
+    upcomingNote += '<div class="report-note">' + plural(R.unrecorded.length, "past session") + ' in this range ' + (R.unrecorded.length === 1 ? 'has' : 'have') + ' no one marked as attended yet and ' +
+      (R.unrecorded.length === 1 ? 'is' : 'are') + ' left out: ' + esc(R.unrecorded.map(function(e){ return e.title; }).join(", ")) + '.</div>';
+  }
+  if (!R.rows.length){
+    return html + upcomingNote + emptyState("No attendance recorded in this range yet.", "Check the Attended box for people on a past session's roster, or change the date range or series above.") + '</div>';
+  }
+
+  function stat(label, value, hint){
+    return '<div class="stat-card"><div class="label">' + label + '</div><div class="value">' + value + '</div>' + (hint ? '<div class="hint">' + hint + '</div>' : '') + '</div>';
+  }
+  html += '<div class="stat-cards">' +
+    stat("Sessions held", fmtNum(R.sessionsHeld), plural(R.series.length, "series", "series")) +
+    stat("Total attendance", fmtNum(R.present), "of " + fmtNum(R.registered) + " sign-ups") +
+    stat("Attendance rate", fmtPct(R.rate), fmtNum(R.registered - R.present) + " didn't attend") +
+    stat("Unique participants", fmtNum(R.unique), fmtNum(R.returning) + " attended 2+ sessions") +
+    stat("Avg. per session", (Math.round(R.avg * 10) / 10).toLocaleString(), "attended") +
+    stat("Schools reached", fmtNum(R.schools.length), "") +
+  '</div>';
+  html += upcomingNote;
+
+  html += '<div class="chart-card"><h4>Attendance over time</h4><p class="chart-sub">People who attended each session, by series.</p>' + attendanceTrendSVG(R) + seriesLegendHTML(R.series, true) + '</div>';
+  html += '<div class="chart-card"><h4>Attendance by series</h4><p class="chart-sub">Total attendance across all sessions held, with unique participants.</p>' + seriesBarsSVG(R) + '</div>';
+  html += '<div class="chart-card"><h4>Sign-ups vs. attendance by session</h4><p class="chart-sub">Everyone who signed up for each session: attended, or didn\'t attend.</p>' + sessionBarsSVG(R) +
+    '<div class="legend">' + R.series.map(function(s){ return '<div class="legend-item"><span class="legend-swatch" style="background:' + seriesColor(s.key) + '"></span>Attended &mdash; ' + esc(seriesLabel(s.key)) + '</div>'; }).join("") +
+    '<div class="legend-item"><span class="legend-swatch" style="background:' + CHART_ABSENT + '"></span>Didn\'t attend</div></div></div>';
+  html += '<div class="chart-card"><h4>Retention: sessions attended per participant</h4><p class="chart-sub">How many sessions in each series every unique participant attended. Shown for series with 2+ sessions held.</p>' + retentionSVG(R) + '</div>';
+  html += '<div class="chart-card"><h4>Top schools</h4><p class="chart-sub">Unique participants by school (as entered in the participant directory).</p>' + schoolsSVG(R) + '</div>';
+  html += '<div class="chart-card"><h4>Session detail</h4>' + sessionTableHTML(R) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+function seriesLegendHTML(series, lines){
+  if (series.length < 2) return '';
+  return '<div class="legend">' + series.map(function(s){
+    var slot = seriesSlot(s.key), color = seriesColor(s.key);
+    var key = lines ? lineKeySVG(slot, color) : '<span class="legend-swatch" style="background:' + color + '"></span>';
+    return '<div class="legend-item">' + key + esc(seriesLabel(s.key)) + '</div>';
+  }).join("") + '</div>';
+}
+
+function attendanceTrendSVG(R){
+  var w = 760, h = 300, padL = 44, padR = 190, padT = 16, padB = 34;
+  var cw = w - padL - padR, ch = h - padT - padB;
+  var DAY = 864e5;
+  var times = R.rows.map(function(r){ return parseISO(r.event.date).getTime(); });
+  var tMin = Math.min.apply(null, times), tMax = Math.max.apply(null, times);
+  if (tMax - tMin < DAY * 40){ tMin -= DAY * 20; tMax += DAY * 20; }
+  var span = tMax - tMin;
+  var sc = niceScale(Math.max.apply(null, R.rows.map(function(r){ return r.present; })), 4);
+  var inset = 18;
+  function X(t){ return padL + inset + (t - tMin) / span * (cw - 2 * inset); }
+  function Y(v){ return padT + ch - v / sc.max * ch; }
+  var svg = '<svg class="viz" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="Line chart of attendance per session over time" style="width:100%;height:auto;" font-family="Inter, sans-serif">';
+  for (var v = 0; v <= sc.max; v += sc.step){
+    svg += '<line x1="' + padL + '" y1="' + Y(v) + '" x2="' + (padL + cw) + '" y2="' + Y(v) + '" stroke="#E2E8F0" stroke-width="1"/>';
+    svg += '<text x="' + (padL - 8) + '" y="' + (Y(v) + 4) + '" font-size="10.5" fill="#64748B" text-anchor="end">' + fmtNum(v) + '</text>';
+  }
+  // month ticks
+  var start = new Date(tMin); start = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  var months = []; for (var d = start; d.getTime() <= tMax; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) months.push(d);
+  var every = Math.max(1, Math.ceil(months.length / 8));
+  months.forEach(function(m, i){
+    if (i % every) return;
+    var x = X(m.getTime());
+    svg += '<line x1="' + x + '" y1="' + (padT + ch) + '" x2="' + x + '" y2="' + (padT + ch + 4) + '" stroke="#94A3B8"/>';
+    svg += '<text x="' + x + '" y="' + (padT + ch + 18) + '" font-size="10.5" fill="#64748B" text-anchor="middle">' + MONTH_SHORT[m.getMonth()] + " '" + String(m.getFullYear()).slice(2) + '</text>';
+  });
+  svg += '<line x1="' + padL + '" y1="' + (padT + ch) + '" x2="' + (padL + cw) + '" y2="' + (padT + ch) + '" stroke="#94A3B8" stroke-width="1"/>';
+  var endLabels = [];
+  var pointsSvg = '';
+  R.series.forEach(function(s){
+    var slot = seriesSlot(s.key), color = seriesColor(s.key);
+    var pts = R.rows.filter(function(r){ return r.key === s.key; });
+    if (pts.length > 1){
+      svg += '<path d="' + pts.map(function(r, i){ return (i ? "L" : "M") + X(parseISO(r.event.date).getTime()).toFixed(1) + " " + Y(r.present).toFixed(1); }).join(" ") +
+        '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+    }
+    pts.forEach(function(r){
+      var x = X(parseISO(r.event.date).getTime()), y = Y(r.present);
+      var tip = plural(r.present, "attended", "attended") + "\n" + r.event.title + " · " + eventDateRangeLabel(r.event) + "\n" + seriesLabel(s.key) + "\n" + fmtNum(r.registered) + " signed up · " + fmtPct(r.rate) + " attended";
+      pointsSvg += '<g class="viz-pt" tabindex="0" data-tip="' + attr(tip) + '"><circle cx="' + x + '" cy="' + y + '" r="13" fill="transparent"/>' + markerSVG(slot, x, y, color) + '</g>';
+    });
+    var last = pts[pts.length - 1];
+    endLabels.push({ y: Y(last.present), name: seriesLabel(s.key), color: color, slot: slot, value: last.present });
+  });
+  svg += pointsSvg;
+  // direct labels in the right gutter, de-overlapped (<= 4 series)
+  if (R.series.length <= 4){
+    endLabels.sort(function(a, b){ return a.y - b.y; });
+    for (var i = 1; i < endLabels.length; i++){ if (endLabels[i].y - endLabels[i-1].y < 16) endLabels[i].y = endLabels[i-1].y + 16; }
+    var overflow = endLabels.length ? endLabels[endLabels.length - 1].y - (padT + ch) : 0;
+    if (overflow > 0) endLabels.forEach(function(l){ l.y -= overflow; });
+    endLabels.forEach(function(l){
+      var lx = padL + cw + 14;
+      svg += '<line x1="' + lx + '" y1="' + l.y + '" x2="' + (lx + 12) + '" y2="' + l.y + '" stroke="' + l.color + '" stroke-width="2"/>';
+      svg += '<text x="' + (lx + 18) + '" y="' + (l.y + 4) + '" font-size="11.5" fill="#1A202C">' + esc(trunc(l.name, 26)) + '<title>' + esc(l.name) + '</title></text>';
+    });
+  }
+  svg += '</svg>';
+  return svg;
+}
+
+function barPath(x, y, w, h, roundEnd){
+  if (w <= 0) return '';
+  var r = roundEnd ? Math.min(4, w, h / 2) : 0;
+  if (!r) return 'M' + x + ' ' + y + ' H' + (x + w) + ' V' + (y + h) + ' H' + x + ' Z';
+  return 'M' + x + ' ' + y + ' H' + (x + w - r) + ' Q' + (x + w) + ' ' + y + ' ' + (x + w) + ' ' + (y + r) +
+    ' V' + (y + h - r) + ' Q' + (x + w) + ' ' + (y + h) + ' ' + (x + w - r) + ' ' + (y + h) + ' H' + x + ' Z';
+}
+
+/* Horizontal bar chart: rows = [{label, sub, segments:[{value, color, tip, inLabel, inkDark}], valueLabel}] */
+function hBarChartSVG(rows, max, opts){
+  opts = opts || {};
+  var w = 760, labelW = opts.labelW || 230, valueW = opts.valueW || 170;
+  var hasSub = rows.some(function(r){ return r.sub; });
+  var rowH = hasSub ? 40 : 30, barH = 18;
+  var barArea = w - labelW - valueW;
+  var h = rows.length * rowH + 8;
+  var svg = '<svg class="viz" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="' + attr(opts.aria || "Bar chart") + '" style="width:100%;height:auto;" font-family="Inter, sans-serif">';
+  rows.forEach(function(r, i){
+    var y0 = 4 + i * rowH, by = y0 + (rowH - barH) / 2;
+    var ty = hasSub ? y0 + rowH / 2 - 2 : y0 + rowH / 2 + 4;
+    svg += '<text x="' + (labelW - 12) + '" y="' + ty + '" text-anchor="end" font-size="12" fill="#1A202C">' + esc(trunc(r.label, 34)) + '<title>' + esc(r.label) + '</title></text>';
+    if (r.sub) svg += '<text x="' + (labelW - 12) + '" y="' + (ty + 14) + '" text-anchor="end" font-size="10.5" fill="#64748B">' + esc(trunc(r.sub, 40)) + '</text>';
+    var x = labelW;
+    var segs = r.segments.filter(function(s){ return s.value > 0; });
+    segs.forEach(function(s, j){
+      var sw = s.value / max * barArea, last = j === segs.length - 1;
+      var drawW = last ? sw : Math.max(0, sw - 2);
+      svg += '<path class="viz-mark" tabindex="0" d="' + barPath(x, by, drawW, barH, last) + '" fill="' + s.color + '" data-tip="' + attr(s.tip || "") + '"/>';
+      if (s.inLabel && drawW > 28) svg += '<text x="' + (x + drawW / 2) + '" y="' + (by + barH / 2 + 4) + '" text-anchor="middle" font-size="10.5" font-weight="600" fill="' + (s.inkDark ? "#0b0b0b" : "#ffffff") + '" pointer-events="none">' + esc(s.inLabel) + '</text>';
+      x += sw;
+    });
+    if (r.valueLabel) svg += '<text x="' + (x + 8) + '" y="' + (by + barH / 2 + 4) + '" font-size="11.5" fill="#1A202C">' + esc(r.valueLabel) + '</text>';
+  });
+  svg += '<line x1="' + labelW + '" y1="2" x2="' + labelW + '" y2="' + (h - 2) + '" stroke="#94A3B8" stroke-width="1"/>';
+  svg += '</svg>';
+  return svg;
+}
+
+function seriesBarsSVG(R){
+  var max = Math.max.apply(null, R.series.map(function(s){ return s.present; }).concat([1]));
+  return hBarChartSVG(R.series.map(function(s){
+    return {
+      label: seriesLabel(s.key), sub: plural(s.sessions, "session") + " · " + fmtPct(s.rate) + " attendance rate",
+      segments: [{ value: s.present, color: seriesColor(s.key), tip: plural(s.present, "attendance", "attendances") + "\n" + seriesLabel(s.key) + "\n" + plural(s.unique, "unique participant") + " · avg " + (Math.round(s.avg * 10) / 10) + " per session" }],
+      valueLabel: fmtNum(s.present) + " total · " + fmtNum(s.unique) + " people"
+    };
+  }), max, { aria: "Bar chart of total attendance by series" });
+}
+
+function sessionBarsSVG(R){
+  var max = Math.max.apply(null, R.rows.map(function(r){ return r.registered; }).concat([1]));
+  return hBarChartSVG(R.rows.map(function(r){
+    var name = r.event.title, when = eventDateRangeLabel(r.event);
+    return {
+      label: name, sub: trunc(shortDateRange(r.event) + " · " + seriesLabel(r.key), 38),
+      segments: [
+        { value: r.present, color: seriesColor(r.key), tip: plural(r.present, "attended", "attended") + "\n" + name + " · " + when },
+        { value: r.absent, color: CHART_ABSENT, tip: plural(r.absent, "didn't attend", "didn't attend") + "\n" + name + " · " + when }
+      ],
+      valueLabel: fmtNum(r.present) + " of " + fmtNum(r.registered) + " · " + fmtPct(r.rate)
+    };
+  }), max, { aria: "Stacked bar chart of sign-ups who attended and did not attend each session" });
+}
+
+function retentionSVG(R){
+  var list = R.series.filter(function(s){ return s.sessions >= 2; });
+  if (!list.length) return '<div class="empty-note">No series in this range has held 2 or more sessions yet.</div>';
+  var chart = hBarChartSVG(list.map(function(s){
+    return {
+      label: seriesLabel(s.key), sub: plural(s.unique, "participant") + " · " + plural(s.sessions, "session") + " held",
+      segments: s.buckets.map(function(n, i){
+        var pct = s.unique ? n / s.unique : 0;
+        return { value: pct, color: RETENTION_RAMP[i], inLabel: n ? fmtNum(n) : "", inkDark: i === 0,
+          tip: plural(n, "participant") + " (" + fmtPct(pct) + ")\nattended " + RETENTION_LABELS[i] + "\n" + seriesLabel(s.key) };
+      }),
+      valueLabel: fmtPct(s.unique ? (s.unique - s.buckets[0]) / s.unique : null) + " came back"
+    };
+  }), 1, { aria: "Stacked bar chart of how many sessions each participant attended, by series", valueW: 130 });
+  var legend = '<div class="legend">' + RETENTION_LABELS.map(function(l, i){ return '<div class="legend-item"><span class="legend-swatch" style="background:' + RETENTION_RAMP[i] + '"></span>' + l + '</div>'; }).join("") + '</div>';
+  return chart + legend;
+}
+
+function schoolsSVG(R){
+  if (!R.schools.length) return '<div class="empty-note">No school information has been entered for the participants who attended.</div>';
+  var top = R.schools.slice(0, 10);
+  var max = Math.max.apply(null, top.map(function(s){ return s.unique; }).concat([1]));
+  var html = hBarChartSVG(top.map(function(s){
+    return { label: s.name,
+      segments: [{ value: s.unique, color: CHART_SINGLE, tip: plural(s.unique, "participant") + "\n" + s.name + "\n" + plural(s.attendance, "total attendance", "total attendances") }],
+      valueLabel: plural(s.unique, "participant") };
+  }), max, { aria: "Bar chart of unique participants by school", labelW: 260, valueW: 140 });
+  if (R.schools.length > top.length) html += '<div class="empty-note">+ ' + plural(R.schools.length - top.length, "more school") + ' (see the Excel export for the full list).</div>';
+  return html;
+}
+
+function sessionTableHTML(R){
+  var html = '<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Session</th><th>Series</th><th>Date</th><th style="text-align:right;">Signed up</th><th style="text-align:right;">Attended</th><th style="text-align:right;">Didn\'t attend</th><th style="text-align:right;">Rate</th></tr></thead><tbody>';
+  R.rows.forEach(function(r){
+    html += '<tr><td style="padding:9px 12px;">' + esc(r.event.title) + '</td><td>' + esc(seriesLabel(r.key)) + '</td><td style="white-space:nowrap;">' + esc(eventDateRangeLabel(r.event)) + '</td>' +
+      '<td style="text-align:right;font-family:var(--font-mono);">' + fmtNum(r.registered) + '</td>' +
+      '<td style="text-align:right;font-family:var(--font-mono);">' + fmtNum(r.present) + '</td>' +
+      '<td style="text-align:right;font-family:var(--font-mono);">' + fmtNum(r.absent) + '</td>' +
+      '<td style="text-align:right;font-family:var(--font-mono);">' + fmtPct(r.rate) + '</td></tr>';
+  });
+  html += '</tbody><tfoot><tr><td style="padding:9px 12px;">Total</td><td></td><td></td>' +
+    '<td style="text-align:right;">' + fmtNum(R.registered) + '</td><td style="text-align:right;">' + fmtNum(R.present) + '</td>' +
+    '<td style="text-align:right;">' + fmtNum(R.registered - R.present) + '</td><td style="text-align:right;">' + fmtPct(R.rate) + '</td></tr></tfoot></table></div>';
+  return html;
+}
+
+/* ---------- Excel export ---------- */
+function exportReportWorkbook(){
+  var R = computeReport();
+  var pctNum = function(x){ return x === null ? "" : Math.round(x * 1000) / 10; };
+  var summary = [
+    ["Attendance Report"], [state.title], [],
+    ["Series", R.groupKeys.map(seriesLabel).join(", ")],
+    ["Date range", reportRangeLabel(R)],
+    ["Generated", fmtDateLong(todayISO())], [],
+    ["Measure", "Value"],
+    ["Sessions held", R.sessionsHeld],
+    ["Sign-ups (sessions counted)", R.registered],
+    ["Total attendance", R.present],
+    ["Didn't attend", R.registered - R.present],
+    ["Attendance rate (%)", pctNum(R.rate)],
+    ["Unique participants", R.unique],
+    ["Participants attending 2+ sessions", R.returning],
+    ["Average attendance per session", Math.round(R.avg * 10) / 10],
+    ["Schools reached", R.schools.length],
+    ["Upcoming sessions in range (not counted)", R.upcoming.length],
+    ["Past sessions with no attendance marked (not counted)", R.unrecorded.length]
+  ];
+  var sessions = [["Session", "Series", "Date", "Signed up", "Attended", "Didn't attend", "Attendance rate (%)"]].concat(R.rows.map(function(r){
+    return [r.event.title, seriesLabel(r.key), eventDateRangeLabel(r.event), r.registered, r.present, r.absent, pctNum(r.rate)];
+  }));
+  var bySeries = [["Series", "Sessions held", "Sign-ups", "Total attendance", "Unique participants", "Avg per session", "Attendance rate (%)"]].concat(R.series.map(function(s){
+    return [seriesLabel(s.key), s.sessions, s.registered, s.present, s.unique, Math.round(s.avg * 10) / 10, pctNum(s.rate)];
+  }));
+  var retention = [["Series", "Sessions held"].concat(RETENTION_LABELS).concat(["Unique participants"])].concat(R.series.map(function(s){
+    return [seriesLabel(s.key), s.sessions].concat(s.buckets).concat([s.unique]);
+  }));
+  var schools = [["School", "Unique participants", "Total attendance"]].concat(R.schools.map(function(s){ return [s.name, s.unique, s.attendance]; }));
+  var filename = "attendance_report_" + todayISO();
+  if (window.XLSX && XLSX.utils && XLSX.writeFile){
+    var wb = XLSX.utils.book_new();
+    [["Summary", summary], ["Sessions", sessions], ["By Series", bySeries], ["Retention", retention], ["Schools", schools]].forEach(function(sh){
+      var ws = XLSX.utils.aoa_to_sheet(sh[1]);
+      ws["!cols"] = sh[1][0].map(function(_, ci){
+        var wch = 10; sh[1].forEach(function(row){ var v = row[ci]; if (v !== undefined) wch = Math.max(wch, Math.min(60, String(v).length + 2)); });
+        return { wch: wch };
+      });
+      XLSX.utils.book_append_sheet(wb, ws, sh[0]);
+    });
+    XLSX.writeFile(wb, filename + ".xlsx");
+  } else {
+    downloadCSVRows(summary.concat([[]]).concat(sessions), filename + ".csv");
+  }
+}
+
+/* ---------- Chart tooltip (shared) ---------- */
+function chartTipEl(){
+  var el = document.getElementById("chart-tip");
+  if (!el){ el = document.createElement("div"); el.id = "chart-tip"; el.setAttribute("role", "tooltip"); document.body.appendChild(el); }
+  return el;
+}
+function showChartTip(target, x, y){
+  var text = target.getAttribute("data-tip");
+  if (!text){ hideChartTip(); return; }
+  var el = chartTipEl();
+  el.textContent = "";
+  text.split("\n").forEach(function(line, i){
+    var div = document.createElement("div");
+    if (i === 0) div.className = "tip-value";
+    div.textContent = line;
+    el.appendChild(div);
+  });
+  el.style.display = "block";
+  var bw = el.offsetWidth, bh = el.offsetHeight;
+  var left = x + 14, top = y + 14;
+  if (left + bw > window.innerWidth - 8) left = x - bw - 14;
+  if (top + bh > window.innerHeight - 8) top = y - bh - 14;
+  el.style.left = Math.max(8, left) + "px";
+  el.style.top = Math.max(8, top) + "px";
+}
+function hideChartTip(){ var el = document.getElementById("chart-tip"); if (el) el.style.display = "none"; }
+document.addEventListener("mousemove", function(e){
+  var t = e.target && e.target.closest ? e.target.closest("svg.viz [data-tip]") : null;
+  if (t) showChartTip(t, e.clientX, e.clientY); else hideChartTip();
+});
+document.addEventListener("focusin", function(e){
+  var t = e.target && e.target.closest ? e.target.closest("svg.viz [data-tip]") : null;
+  if (t){ var r = t.getBoundingClientRect(); showChartTip(t, r.right, r.top); } else hideChartTip();
+});
+document.addEventListener("focusout", hideChartTip);
+
 function attendanceViewHTML(){
   var groups = attendanceSessionGroups();
   var sortBy = state.attendanceSortBy || "lastName";
-  var html = '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
+  var html = ui.attendanceSession === "reports" ? (
+  '<div class="toolbar no-print"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
+    '<button class="btn" data-action="report-export" title="Download the numbers behind every chart as an Excel workbook">Export summary (Excel)</button>' +
+    '<button class="btn btn-primary" data-action="report-print" title="Opens the print dialog; choose Save as PDF for a file">Print / Save as PDF</button>' +
+  '</div>') : (
+  '<div class="toolbar"><h2 class="page-title">Attendance</h2><div class="grow"></div>' +
     '<label style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-muted);">Sort by' +
       '<select id="attendance-sort-select" style="border:1px solid var(--border);border-radius:8px;padding:5px 8px;font-size:12.5px;">' +
         '<option value="lastName" ' + (sortBy==="lastName"?"selected":"") + '>Last name</option>' +
@@ -1434,11 +1985,12 @@ function attendanceViewHTML(){
     '<button class="btn" data-action="export-all-attendance">Download all attendance</button>' +
     '<button class="btn btn-secondary" data-action="import-file">Import spreadsheet</button>' +
     (ui.attendanceSession === "directory" ? '<button class="btn btn-primary" data-action="add-participant">+ Add participant</button>' : '') +
-  '</div>';
-  html += attendanceAreasBarHTML();
+  '</div>');
+  html += '<div class="no-print">' + attendanceAreasBarHTML() + '</div>';
   html += '<div class="two-col">';
   html += '<div class="side-list">';
   html += '<div class="side-list-item ' + (ui.attendanceSession==="summary"?"active":"") + '" data-action="attendance-select" data-id="summary">Summary</div>';
+  html += '<div class="side-list-item ' + (ui.attendanceSession==="reports"?"active":"") + '" data-action="attendance-select" data-id="reports">Reports &amp; charts</div>';
   html += '<div class="side-list-item ' + (ui.attendanceSession==="directory"?"active":"") + '" data-action="attendance-select" data-id="directory">All Participants <span class="sub">' + state.participants.length + '</span></div>';
   groups.forEach(function(g){
     if (ui.attendanceGroupCollapsed[g.key] === undefined) ui.attendanceGroupCollapsed[g.key] = true;
@@ -1464,6 +2016,8 @@ function attendanceViewHTML(){
     html += directoryTableHTML();
   } else if (ui.attendanceSession === "summary"){
     html += attendanceSummaryHTML(groups);
+  } else if (ui.attendanceSession === "reports"){
+    html += reportsBodyHTML();
   } else {
     var session = eventById(ui.attendanceSession);
     if (!session || attendanceBoardIds().indexOf(session.boardId) === -1){ ui.attendanceSession = "directory"; html += directoryTableHTML(); }
@@ -2977,6 +3531,16 @@ var ACTIONS = {
   "close-modal-overlay": function(t, ev){ if (ev.target === t) closeModal(); },
 
   "attendance-select": function(t){ ui.attendanceSession = t.getAttribute("data-id"); ui.rosterFilter = "all"; render(); },
+  "report-toggle-series": function(t){
+    var key = t.getAttribute("data-id");
+    var current = reportGroupKeys().slice();
+    var i = current.indexOf(key);
+    if (i === -1) current.push(key); else current.splice(i, 1);
+    ui.reportGroupKeys = current;
+    render();
+  },
+  "report-print": function(){ window.print(); },
+  "report-export": function(){ exportReportWorkbook(); },
   "attendance-toggle-group": function(t){
     var key = t.getAttribute("data-key");
     ui.attendanceGroupCollapsed[key] = !ui.attendanceGroupCollapsed[key];
@@ -3494,6 +4058,16 @@ document.addEventListener("change", function(e){
     ui.budgetChartsBoardFilter = t.value;
     render();
   }
+  if (t.id === "report-preset"){
+    var preset = reportDatePresets().find(function(x){ return x.id === t.value; });
+    if (preset){ ui.reportPreset = preset.id; ui.reportFrom = preset.from; ui.reportTo = preset.to; }
+    else ui.reportPreset = "custom";
+    render();
+  } else if (t.id === "report-from" || t.id === "report-to"){
+    ui[t.id === "report-from" ? "reportFrom" : "reportTo"] = t.value;
+    ui.reportPreset = "custom";
+    render();
+  }
   if (t.id === "board-is-folder"){
     var parentField = document.getElementById("board-parent-field");
     if (parentField) parentField.hidden = t.checked;
@@ -3708,7 +4282,7 @@ function readSpreadsheetRows(file, callback){
 }
 
 function handleImportFile(file){
-  var targetSessionId = (ui.attendanceSession && ui.attendanceSession !== "directory") ? ui.attendanceSession : null;
+  var targetSessionId = (ui.attendanceSession && ["directory", "summary", "reports"].indexOf(ui.attendanceSession) === -1) ? ui.attendanceSession : null;
   readSpreadsheetRows(file, function(headerRow, dataRows){ importRows(headerRow, dataRows, targetSessionId); });
 }
 document.getElementById("file-import-input").addEventListener("change", function(e){
@@ -3868,7 +4442,7 @@ function handleBackupFile(file){
       state = ensureDefaults(restored);
       state.participants.forEach(migrateParticipant);
       dropRoleCustomField(state);
-      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", attendanceGroupCollapsed: {}, budgetChartsBoardFilter: "all", budgetSortField: null, budgetSortCategory: null, budgetSortDir: "asc", lineItemGroupCollapsed: {} };
+      ui = { attendanceSession: "directory", budgetTab: "overview", budgetDetailId: null, dragEventId: null, participantSearch: "", mailingListBoardId: null, mailingListDomain: "all", attendanceGroupCollapsed: {}, budgetChartsBoardFilter: "all", budgetSortField: null, budgetSortCategory: null, budgetSortDir: "asc", lineItemGroupCollapsed: {}, reportGroupKeys: null, reportFrom: "", reportTo: "", reportPreset: "all" };
       saveState(); render();
       alertModal("Backup restored successfully.", "Import complete");
     }, { title: "Restore backup?", confirmLabel: "Restore backup" });
